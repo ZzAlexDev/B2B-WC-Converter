@@ -128,17 +128,20 @@ class XLSXParser:
         
         sku_str = str(sku).strip()
         
-        # Замена / на - (из конфигурации)
+        # Сначала удаляем все пробелы вокруг дефисов и слэшей
+        sku_str = re.sub(r'\s*[/\-]\s*', '-', sku_str)
+        
+        # Заменяем / на - (если остались без пробелов)
         sku_str = sku_str.replace('/', '-')
         
-        # Удаление лишних пробелов
+        # Удаление лишних пробелов (теперь их не должно быть)
         sku_str = ' '.join(sku_str.split())
         
         # Замена нескольких дефисов подряд на один
         sku_str = re.sub(r'-+', '-', sku_str)
         
         return sku_str
-    
+
     def clean_price(self, price_str: str) -> Optional[float]:
         """
         Очистка и преобразование цены
@@ -157,17 +160,29 @@ class XLSXParser:
             price_text = str(price_str).strip()
             
             # Удаляем текст "руб.", пробелы, валюту
-            patterns_to_remove = ['руб.', 'рублей', 'RUB', '₽', ' ', '\xa0']
+            patterns_to_remove = ['руб.', 'рублей', 'RUB', '₽', '\xa0']
             for pattern in patterns_to_remove:
                 price_text = price_text.replace(pattern, '')
+            
+            # Удаляем пробелы (разделители тысяч)
+            price_text = price_text.replace(' ', '')
             
             # Заменяем запятую на точку для десятичных чисел
             price_text = price_text.replace(',', '.')
             
             # Удаляем все нецифровые символы кроме точки и минуса
+            # Но нужно обработать случай с тысячными разделителями
+            # Удаляем точки, которые не являются десятичными разделителями
+            parts = price_text.split('.')
+            if len(parts) > 2:
+                # Если больше одной точки, это вероятно разделитель тысяч
+                # Оставляем только последнюю точку как десятичный разделитель
+                price_text = ''.join(parts[:-1]) + '.' + parts[-1]
+            
+            # Удаляем все нецифровые символы кроме точки и минуса
             price_text = re.sub(r'[^\d\.\-]', '', price_text)
             
-            if not price_text:
+            if not price_text or price_text == '.':
                 return None
             
             # Преобразуем в число
@@ -183,6 +198,7 @@ class XLSXParser:
         except (ValueError, TypeError) as e:
             logger.warning(f"Ошибка преобразования цены '{price_str}': {e}")
             return None
+
     
     def convert_category(self, category_str: str) -> str:
         """
