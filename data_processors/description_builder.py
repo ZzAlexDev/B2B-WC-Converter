@@ -215,44 +215,94 @@ class DescriptionBuilder:
         
         return documents
     
-    def _create_readable_filename(self, filename: str) -> str:
+    def _create_readable_filename(self, filename: str, doc_type: str = "", product_name: str = "") -> str:
         """
         Создание читаемого имени файла
         
         Args:
             filename: Исходное имя файла
+            doc_type: Тип документа (Чертежи, Инструкции и т.д.)
+            product_name: Название товара для включения в имя документа
             
         Returns:
             str: Читаемое имя
         """
-        if not filename:
-            return "Документ"
+        # Базовое название по типу документа
+        base_name = self._get_default_doc_name(doc_type)
         
-        # Заменяем подчеркивания и дефисы на пробелы
-        readable = filename.replace('_', ' ').replace('-', ' ')
+        # Если есть название товара - добавляем его
+        if product_name:
+            # Очищаем название товара для использования в имени файла
+            clean_product_name = self._clean_product_name_for_docs(product_name)
+            return f"{base_name} {clean_product_name}"
         
-        # Удаляем UUID и хеши
-        readable = re.sub(r'[a-f0-9]{8,}', '', readable)
+        return base_name
+
+    def _clean_product_name_for_docs(self, product_name: str) -> str:
+        """
+        Очистка названия товара для использования в именах документов
+        
+        Args:
+            product_name: Название товара
+            
+        Returns:
+            str: Очищенное название
+        """
+        if not product_name:
+            return ""
+        
+        clean = product_name.strip()
+        
+        # Удаляем специальные символы, но сохраняем дефисы как часть артикулов
+        # Разрешаем: буквы, цифры, пробелы, дефисы
+        clean = re.sub(r'[^\w\s\-]', ' ', clean)
         
         # Удаляем лишние пробелы
-        readable = ' '.join(readable.split())
+        clean = ' '.join(clean.split())
         
-        # Делаем первую букву заглавной
-        if readable:
-            readable = readable[0].upper() + readable[1:]
+        # Заменяем множественные пробелы на одинарные
+        clean = re.sub(r'\s+', ' ', clean)
         
-        # Если после очистки ничего не осталось
-        if not readable or len(readable) < 3:
-            readable = "Документ"
+        # Ограничиваем длину (например, 60 символов)
+        if len(clean) > 60:
+            # Обрезаем до последнего пробела
+            truncated = clean[:60]
+            last_space = truncated.rfind(' ')
+            if last_space > 40:  # Если есть разумное место для обрезания
+                clean = truncated[:last_space]
+            else:
+                clean = truncated
         
-        return readable
+        return clean
+
+    def _get_default_doc_name(self, doc_type: str) -> str:
+        """
+        Получение стандартного имени документа по типу
+        
+        Args:
+            doc_type: Тип документа
+            
+        Returns:
+            str: Стандартное имя
+        """
+        defaults = {
+            'Чертежи': 'Чертеж',
+            'Инструкции': 'Инструкция',
+            'Сертификаты': 'Сертификат',
+            'Промоматериалы': 'Промо-материал',
+            'Видео': 'Видео',
+            '': 'Документ',
+        }
+        
+        return defaults.get(doc_type, 'Документ')
     
-    def build_documents_section(self, documents_data: Dict[str, str]) -> str:
+    def build_documents_section(self, documents_data: Dict[str, str], product_name: str = "") -> str:
         """
         Создание секции документации
         
         Args:
             documents_data: Словарь с документами по типам
+            product_name: Название товара для имен документов
             
         Returns:
             str: HTML секция документации
@@ -264,6 +314,15 @@ class DescriptionBuilder:
         html_parts.append('<h3>Документация</h3>')
         
         try:
+            # Типы документов и их отображаемые названия
+            doc_type_display = {
+                'Чертежи': 'Чертежи и схемы',
+                'Сертификаты': 'Сертификаты',
+                'Инструкции': 'Инструкции по эксплуатации',
+                'Промоматериалы': 'Промо-материалы',
+                'Видео': 'Видеоматериалы',
+            }
+            
             # Обрабатываем каждый тип документов
             for doc_type, doc_urls in documents_data.items():
                 if not doc_urls:
@@ -274,21 +333,23 @@ class DescriptionBuilder:
                 
                 if documents:
                     # Добавляем подзаголовок для типа документа
-                    type_names = {
-                        'Чертежи': 'Чертежи и схемы',
-                        'Сертификаты': 'Сертификаты',
-                        'Инструкции': 'Инструкции',
-                        'Промоматериалы': 'Промо-материалы',
-                        'Видео': 'Видеоматериалы',
-                    }
-                    
-                    type_name = type_names.get(doc_type, doc_type)
-                    html_parts.append(f'<h4>{type_name}</h4>')
+                    display_name = doc_type_display.get(doc_type, doc_type)
+                    html_parts.append(f'<h4>{display_name}</h4>')
                     html_parts.append('<ul>')
                     
                     for doc in documents:
-                        # Создаем ссылку с иконкой
-                        link_text = f'{doc["readable_name"]}{doc["file_type"]}'
+                        # Создаем название с именем товара
+                        doc_name = self._create_readable_filename(
+                            doc['filename'], 
+                            doc_type, 
+                            product_name
+                        )
+                        
+                        # Определяем расширение для текста типа файла
+                        file_type_text = self.file_type_texts.get(doc['extension'], '')
+                        
+                        # Формируем полное название
+                        link_text = f'{doc_name}{file_type_text}'
                         
                         html_parts.append(
                             f'<li>'
@@ -306,6 +367,10 @@ class DescriptionBuilder:
                 return html
             else:
                 return ""
+            
+        except Exception as e:
+            logger.error(f"Ошибка создания секции документации: {e}")
+            return ""
             
         except Exception as e:
             logger.error(f"Ошибка создания секции документации: {e}")
@@ -335,14 +400,13 @@ class DescriptionBuilder:
             # Штрих-коды
             if 'Штрих код' in additional_info and additional_info['Штрих код']:
                 barcodes = additional_info['Штрих код']
-                # Разделяем несколько штрих-кодов
-                barcode_list = [code.strip() for code in barcodes.split('/') if code.strip()]
+                # Разделяем несколько штрих-кодов (разделитель может быть "/" или пробел+"/"+пробел)
+                barcode_list = [code.strip() for code in re.split(r'\s*/\s*', barcodes) if code.strip()]
                 
                 if barcode_list:
-                    html_parts.append('<p><strong>Штрих-коды:</strong><br>')
-                    for barcode in barcode_list:
-                        html_parts.append(f'{barcode}<br>')
-                    html_parts.append('</p>')
+                    # Форматируем через запятую
+                    formatted_barcodes = ', '.join(barcode_list)
+                    html_parts.append(f'<p><strong>Штрих-коды:</strong> {formatted_barcodes}</p>')
             
             # Эксклюзивность
             if 'Эксклюзив' in additional_info and additional_info['Эксклюзив']:
@@ -379,6 +443,8 @@ class DescriptionBuilder:
         }
         
         try:
+            product_name = product_data.get('name', '')
+            
             # 1. Основное описание
             main_description = self.clean_html_description(
                 product_data.get('description_raw', '')
@@ -389,9 +455,10 @@ class DescriptionBuilder:
                 product_data.get('characteristics_raw', '')
             )
             
-            # 3. Документация
+            # 3. Документация (передаем название товара)
             documents_section = self.build_documents_section(
-                product_data.get('documents', {})
+                product_data.get('documents', {}),
+                product_name
             )
             
             # 4. Дополнительная информация
