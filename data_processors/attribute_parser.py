@@ -96,7 +96,6 @@ class AttributeParser:
             text = characteristics_str.strip()
             
             # Разделяем по точке с запятой
-            # Используем более умное разделение чтобы избежать проблем с точками с запятой в значениях
             parts = []
             current_part = ""
             bracket_count = 0
@@ -129,7 +128,6 @@ class AttributeParser:
                 
                 # Пытаемся разделить по двоеточию
                 if ':' in part:
-                    # Ищем первое двоеточие (чтобы избежать проблем с двоеточиями в значениях)
                     colon_pos = part.find(':')
                     key = part[:colon_pos].strip()
                     value = part[colon_pos + 1:].strip()
@@ -211,7 +209,7 @@ class AttributeParser:
         if key in self.wc_attributes:
             return True, self.wc_attributes[key]
         
-        # Проверяем частичное соответствие (для случаев когда ключи могут немного отличаться)
+        # Проверяем частичное соответствие
         normalized_key = self._normalize_key(key)
         
         for wc_key, wc_slug in self.wc_attributes.items():
@@ -225,27 +223,51 @@ class AttributeParser:
     
     def normalize_value(self, value: str) -> str:
         """
-        Нормализация значения характеристики
+        Нормализация значения характеристики (для атрибутов WC)
         
         Args:
             value: Исходное значение
             
         Returns:
-            str: Нормализованное значение
+            str: Нормализованное значение (yes/no для WC)
         """
         if not value:
             return ""
         
         value_str = str(value).strip()
         
-        # Обработка boolean значений - ДЛЯ АТРИБУТОВ WC оставляем yes/no
-        # Но для отображения в описании будем использовать Да/Нет
+        # Обработка boolean значений для WC атрибутов
+        value_lower = value_str.lower()
+        if value_lower in self.boolean_values:
+            return self.boolean_values[value_lower]
         
         # Удаление лишних пробелов
         value_str = ' '.join(value_str.split())
         
         return value_str
-
+    
+    def _format_value_for_display(self, value: str) -> str:
+        """
+        Форматирование значения для отображения в описании
+        
+        Args:
+            value: Исходное значение
+            
+        Returns:
+            str: Отформатированное значение (boolean как Да/Нет)
+        """
+        if not value:
+            return ""
+        
+        value_lower = value.lower().strip()
+        
+        # Преобразуем boolean для отображения
+        if value_lower in ['yes', 'true', 'да']:
+            return 'Да'
+        elif value_lower in ['no', 'false', 'нет']:
+            return 'Нет'
+        
+        return value
     
     def parse_and_group(self, characteristics_str: str) -> Dict[str, List[Characteristic]]:
         """
@@ -272,7 +294,7 @@ class AttributeParser:
         grouped = defaultdict(list)
         
         for key, value in raw_characteristics:
-            # Нормализуем значение
+            # Нормализуем значение для WC
             normalized_value = self.normalize_value(value)
             
             # Определяем группу
@@ -300,6 +322,66 @@ class AttributeParser:
         
         return dict(grouped)
     
+    def format_for_description(self, characteristics_str: str) -> str:
+        """
+        Форматирование характеристик для HTML описания
+        
+        Args:
+            characteristics_str: Строка характеристик
+            
+        Returns:
+            str: HTML с группировкой характеристик
+        """
+        grouped = self.parse_and_group(characteristics_str)
+        
+        if not grouped:
+            return ""
+        
+        html_parts = []
+        
+        # Сортируем группы для красивого отображения
+        group_order = [group_name for keywords, group_name in self.characteristic_groups]
+        group_order.append(self.default_group)
+        
+        # Добавляем только существующие группы в правильном порядке
+        for group_name in group_order:
+            if group_name in grouped and grouped[group_name]:
+                characteristics = grouped[group_name]
+                
+                # Заголовок группы
+                html_parts.append(f'<h4>{group_name}</h4>')
+                html_parts.append('<ul>')
+                
+                # Характеристики группы
+                for char in characteristics:
+                    # Используем форматирование для отображения
+                    display_value = self._format_value_for_display(char.value)
+                    html_parts.append(f'<li><strong>{char.key}:</strong> {display_value}</li>')
+                
+                html_parts.append('</ul>')
+        
+        html = '\n'.join(html_parts)
+        
+        # Обертываем в общий блок
+        if html:
+            html = f'<h3>Технические характеристики</h3>\n{html}'
+        
+        logger.debug(f"Сформирован HTML описания: {len(html)} символов")
+        
+        return html
+    
+    def format_for_display(self, characteristics_str: str) -> str:
+        """
+        Алиас для format_for_description (для совместимости)
+        
+        Args:
+            characteristics_str: Строка характеристик
+            
+        Returns:
+            str: HTML с характеристиками
+        """
+        return self.format_for_description(characteristics_str)
+    
     def extract_wc_attributes(self, characteristics_str: str) -> Dict[str, Any]:
         """
         Извлечение атрибутов WooCommerce из характеристик
@@ -323,14 +405,13 @@ class AttributeParser:
         # Извлекаем атрибуты WC
         for char in all_characteristics:
             if char.is_wc_attribute and char.wc_attribute_slug:
-                # Для атрибутов WC нужно специальное форматирование
+                # Для атрибутов WC используем нормализованные значения (yes/no)
                 wc_attributes[char.wc_attribute_slug] = char.value
                 
                 # Для attribute_data нужно создать строку настроек
-                # Формат: "1:0|0" где 1 - видимость, 0 - не используется для вариаций
                 wc_attributes_data[f"{char.wc_attribute_slug}_data"] = "1:0|0"
         
-        # Особый случай: атрибут габаритов (объединяем несколько характеристик)
+        # Особый случай: атрибут габаритов
         if 'pa_dimensions' in self.wc_attributes.values():
             dimensions = self._extract_dimensions(all_characteristics)
             if dimensions:
@@ -369,7 +450,6 @@ class AttributeParser:
         
         # Формируем строку
         if dimensions:
-            # Формат: "ШxВxГ" или что есть
             parts = []
             for dim in ['width', 'height', 'length']:
                 if dim in dimensions:
@@ -416,57 +496,6 @@ class AttributeParser:
         logger.debug(f"Извлечено полей: {list(extracted.keys())}")
         
         return extracted
-    
-    def format_for_description(self, characteristics_str: str) -> str:
-        """
-        Форматирование характеристик для HTML описания
-        
-        Args:
-            characteristics_str: Строка характеристик
-            
-        Returns:
-            str: HTML с группировкой характеристик
-        """
-        grouped = self.parse_and_group(characteristics_str)
-        
-        if not grouped:
-            return ""
-        
-        html_parts = []
-        
-        # Сортируем группы для красивого отображения
-        group_order = [group_name for keywords, group_name in self.characteristic_groups]
-        group_order.append(self.default_group)
-        
-        # Добавляем только существующие группы в правильном порядке
-        for group_name in group_order:
-            if group_name in grouped and grouped[group_name]:
-                characteristics = grouped[group_name]
-                
-                # Заголовок группы
-                html_parts.append(f'<h4>{group_name}</h4>')
-                html_parts.append('<ul>')
-                
-                # Характеристики группы
-                for char in characteristics:
-                    html_parts.append(f'<li><strong>{char.key}:</strong> {char.value}</li>')
-                
-                html_parts.append('</ul>')
-        
-        # Удаляем последнюю группу если она пустая
-        if html_parts and html_parts[-1] == '</ul>':
-            # Проверяем что перед </ul> есть характеристики
-            pass
-        
-        html = '\n'.join(html_parts)
-        
-        # Обертываем в общий блок
-        if html:
-            html = f'<h3>Технические характеристики</h3>\n{html}'
-        
-        logger.debug(f"Сформирован HTML описания: {len(html)} символов")
-        
-        return html
     
     def get_stats(self) -> Dict[str, int]:
         """
@@ -519,39 +548,3 @@ def format_characteristics_for_description(characteristics_str: str) -> str:
     """
     parser = AttributeParser()
     return parser.format_for_description(characteristics_str)
-
-    # ДОБАВИМ НОВЫЙ МЕТОД ДЛЯ ОТОБРАЖЕНИЯ В ОПИСАНИИ:
-    def format_value_for_display(self, value: str, is_for_display: bool = True) -> str:
-        """
-        Форматирование значения для отображения
-        
-        Args:
-            value: Исходное значение
-            is_for_display: True - для отображения, False - для атрибутов WC
-            
-        Returns:
-            str: Отформатированное значение
-        """
-        if not value:
-            return ""
-        
-        value_str = str(value).strip().lower()
-        
-        if is_for_display:
-            # Для отображения в описании
-            if value_str == 'yes':
-                return 'Да'
-            elif value_str == 'no':
-                return 'Нет'
-            elif value_str == 'true':
-                return 'Да'
-            elif value_str == 'false':
-                return 'Нет'
-        else:
-            # Для атрибутов WC
-            if value_str == 'да':
-                return 'yes'
-            elif value_str == 'нет':
-                return 'no'
-        
-        return value  # Возвращаем как есть
