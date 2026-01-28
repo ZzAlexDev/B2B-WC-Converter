@@ -140,6 +140,7 @@ class DescriptionBuilder:
             logger.error(f"Ошибка создания excerpt: {e}")
             return ""
     
+    # В методе build_characteristics_section:
     def build_characteristics_section(self, characteristics_str: str) -> str:
         """
         Создание секции технических характеристик
@@ -154,7 +155,7 @@ class DescriptionBuilder:
             return ""
         
         try:
-            # Используем парсер характеристик
+            # ИСПРАВЛЕНИЕ: используем format_for_description
             html = self.attribute_parser.format_for_description(characteristics_str)
             
             if html:
@@ -253,20 +254,23 @@ class DescriptionBuilder:
         
         clean = product_name.strip()
         
-        # Удаляем специальные символы, но сохраняем дефисы как часть артикулов
-        # Разрешаем: буквы, цифры, пробелы, дефисы
-        clean = re.sub(r'[^\w\s\-]', ' ', clean)
+        # 1. Заменяем / на - (как в SKU)
+        clean = clean.replace('/', '-')
         
-        # Удаляем лишние пробелы
-        clean = ' '.join(clean.split())
+        # 2. Удаляем специальные символы, но сохраняем дефисы и пробелы
+        # Разрешаем: буквы (включая кириллицу), цифры, пробелы, дефисы
+        clean = re.sub(r'[^\w\s\-]', ' ', clean, flags=re.UNICODE)
         
-        # Заменяем множественные пробелы на одинарные
+        # 3. Заменяем множественные пробелы на одинарные
         clean = re.sub(r'\s+', ' ', clean)
         
-        # Ограничиваем длину (например, 60 символов)
+        # 4. Удаляем пробелы в начале и конце
+        clean = clean.strip()
+        
+        # 5. Ограничиваем длину (60 символов - разумный предел)
         if len(clean) > 60:
-            # Обрезаем до последнего пробела
             truncated = clean[:60]
+            # Пытаемся обрезать до последнего пробела
             last_space = truncated.rfind(' ')
             if last_space > 40:  # Если есть разумное место для обрезания
                 clean = truncated[:last_space]
