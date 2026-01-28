@@ -238,15 +238,14 @@ class AttributeParser:
         
         value_str = str(value).strip()
         
-        # Обработка boolean значений
-        lower_value = value_str.lower()
-        if lower_value in self.boolean_values:
-            return self.boolean_values[lower_value]
+        # Обработка boolean значений - ДЛЯ АТРИБУТОВ WC оставляем yes/no
+        # Но для отображения в описании будем использовать Да/Нет
         
         # Удаление лишних пробелов
         value_str = ' '.join(value_str.split())
         
         return value_str
+
     
     def parse_and_group(self, characteristics_str: str) -> Dict[str, List[Characteristic]]:
         """
@@ -520,3 +519,39 @@ def format_characteristics_for_description(characteristics_str: str) -> str:
     """
     parser = AttributeParser()
     return parser.format_for_description(characteristics_str)
+
+    # ДОБАВИМ НОВЫЙ МЕТОД ДЛЯ ОТОБРАЖЕНИЯ В ОПИСАНИИ:
+    def format_value_for_display(self, value: str, is_for_display: bool = True) -> str:
+        """
+        Форматирование значения для отображения
+        
+        Args:
+            value: Исходное значение
+            is_for_display: True - для отображения, False - для атрибутов WC
+            
+        Returns:
+            str: Отформатированное значение
+        """
+        if not value:
+            return ""
+        
+        value_str = str(value).strip().lower()
+        
+        if is_for_display:
+            # Для отображения в описании
+            if value_str == 'yes':
+                return 'Да'
+            elif value_str == 'no':
+                return 'Нет'
+            elif value_str == 'true':
+                return 'Да'
+            elif value_str == 'false':
+                return 'Нет'
+        else:
+            # Для атрибутов WC
+            if value_str == 'да':
+                return 'yes'
+            elif value_str == 'нет':
+                return 'no'
+        
+        return value  # Возвращаем как есть
