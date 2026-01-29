@@ -66,7 +66,7 @@ def main():
         print()
         
         # Показываем первые 3 строки для проверки
-        print("3. Пример данных (первые 3 строки):")
+        print("3. Пример данных (первые 10 строки):")
         print("-" * 40)
         
         # Выбираем ключевые колонки для показа
@@ -74,7 +74,7 @@ def main():
         available_columns = [col for col in key_columns if col in df.columns]
         
         if available_columns:
-            sample = df[available_columns].head(3)
+            sample = df[available_columns].head(10)
             
             # Красиво выводим
             for idx, row in sample.iterrows():
