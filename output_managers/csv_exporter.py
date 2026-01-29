@@ -133,10 +133,18 @@ class CSVExporter:
             wc_attrs = product_data.get('wc_attributes', {})
             if wc_attrs and 'attributes' in wc_attrs:
                 for attr_slug, attr_value in wc_attrs['attributes'].items():
-                    # Добавляем только если это поле есть в нашем списке
+                    # Проверяем что атрибут есть в нашем списке полей
                     attribute_field = f'attribute:{attr_slug}'
+                    attribute_data_field = f'attribute_data:{attr_slug}'
+                    
                     if attribute_field in self.wc_fields:
                         wc_row[attribute_field] = attr_value
+                        
+                        # Добавляем данные атрибута если поле существует
+                        if attribute_data_field in self.wc_fields:
+                            # Видимый, не для вариаций
+                            wc_row[attribute_data_field] = '1:0|0'  
+
             
             # 9. Генерация SEO полей Yoast
             seo_fields = generate_seo_for_product(

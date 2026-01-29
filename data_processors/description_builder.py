@@ -101,71 +101,77 @@ class DescriptionBuilder:
             logger.error(f"Ошибка очистки HTML: {e}")
             return html_content
     
-    def extract_excerpt(self, html_content: str, max_length: int = 200) -> str:
-        """
-        Создание краткого описания (excerpt) из полного
+def extract_excerpt(self, html_content: str, max_length: int = 200) -> str:
+    """
+    Создание краткого описания (excerpt) из полного
+    с добавлением ссылки на подробные характеристики
+    
+    Args:
+        html_content: Полное описание
+        max_length: Максимальная длина excerpt
         
-        Args:
-            html_content: Полное описание
-            max_length: Максимальная длина excerpt
-            
-        Returns:
-            str: Краткое описание
-        """
-        if not html_content:
-            return ""
+    Returns:
+        str: Краткое описание с ссылкой
+    """
+    if not html_content:
+        return ""
+    
+    try:
+        # Удаляем HTML теги для базового текста
+        text_only = re.sub(r'<[^>]+>', ' ', html_content)
+        # Удаляем лишние пробелы
+        text_only = ' '.join(text_only.split())
         
-        try:
-            # Удаляем HTML теги
-            text_only = re.sub(r'<[^>]+>', ' ', html_content)
-            
-            # Удаляем лишние пробелы
-            text_only = ' '.join(text_only.split())
-            
-            # Обрезаем до максимальной длины
-            if len(text_only) > max_length:
-                # Обрезаем до последнего полного слова
-                truncated = text_only[:max_length]
-                last_space = truncated.rfind(' ')
-                if last_space > max_length * 0.7:  # Если есть разумное место для обрезания
-                    text_only = truncated[:last_space] + '...'
-                else:
-                    text_only = truncated + '...'
-            
-            logger.debug(f"Excerpt создан: {len(text_only)} символов")
-            
-            return text_only
-            
-        except Exception as e:
-            logger.error(f"Ошибка создания excerpt: {e}")
-            return ""
+        # Обрезаем до максимальной длины
+        if len(text_only) > max_length:
+            # Обрезаем до последнего полного слова
+            truncated = text_only[:max_length]
+            last_space = truncated.rfind(' ')
+            if last_space > max_length * 0.7:  # Если есть разумное место для обрезания
+                excerpt_text = truncated[:last_space] + '...'
+            else:
+                excerpt_text = truncated + '...'
+        else:
+            excerpt_text = text_only
+        
+        # Добавляем ссылку на характеристики - УБЕДИТЕСЬ ЧТО ЯКОРЬ ЕСТЬ
+        excerpt_with_link = f"{excerpt_text} <a href=\"#product-characteristics\">Подробные характеристики →</a>"
+        
+        logger.debug(f"Excerpt создан: {len(excerpt_with_link)} символов")
+        return excerpt_with_link
+        
+    except Exception as e:
+        logger.error(f"Ошибка создания excerpt: {e}")
+        return text_only[:max_length] + '...' if text_only else ""
+
     
     # В методе build_characteristics_section:
     def build_characteristics_section(self, characteristics_str: str) -> str:
         """
         Создание секции технических характеристик
-        
         Args:
             characteristics_str: Строка характеристик
-            
         Returns:
-            str: HTML секция характеристик
+            str: HTML секция характеристик с якорем
         """
         if not characteristics_str or not self.attribute_parser:
             return ""
         
         try:
-            # ИСПРАВЛЕНИЕ: используем format_for_description
+            # Используем format_for_description
             html = self.attribute_parser.format_for_description(characteristics_str)
             
             if html:
+                # Добавляем якорь для навигации - ДЕЛАЕМ БОЛЕЕ НАДЕЖНО
+                html_with_anchor = f'<div id="product-characteristics">\n{html}\n</div>'
                 logger.debug(f"Секция характеристик создана: {len(html)} символов")
+                return html_with_anchor
             
-            return html
-            
+            return ""
         except Exception as e:
             logger.error(f"Ошибка создания секции характеристик: {e}")
             return ""
+
     
     def parse_document_links(self, documents_str: str) -> List[Dict[str, str]]:
         """

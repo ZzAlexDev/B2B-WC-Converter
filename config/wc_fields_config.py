@@ -87,20 +87,46 @@ class WCFieldsConfig:
         'tax:product_tag',
         'tax:product_shipping_class',
         
-        # Атрибуты WooCommerce (предопределенные)
-        'attribute:pa_proizvoditel',
-        'attribute_data:pa_proizvoditel',
-        'attribute:pa_sposob-primenenija',
-        'attribute_data:pa_sposob-primenenija',
-        'attribute:pa_tip-narushenij',
-        'attribute_data:pa_tip-narushenij',
-        'attribute:pa_tip-uchrezhdenij',
-        'attribute_data:pa_tip-uchrezhdenij',
-        'attribute:pa_tip-ustrojstva',
-        'attribute_data:pa_tip-ustrojstva',
-        'attribute:pa_zona-primenenija',
-        'attribute_data:pa_zona-primenenija',
+        # ТОЛЬКО НУЖНЫЕ АТРИБУТЫ (убрали ненужные из другого списка)
+        # Новые основные атрибуты (на основе данных)
+        'attribute:pa_placement',
+        'attribute_data:pa_placement',
+        'attribute:pa_application',
+        'attribute_data:pa_application',
+        'attribute:pa_warranty',
+        'attribute_data:pa_warranty',
+        'attribute:pa_color',
+        'attribute_data:pa_color',
+        'attribute:pa_country',
+        'attribute_data:pa_country',
+        'attribute:pa_power',
+        'attribute_data:pa_power',
+        'attribute:pa_weight',
+        'attribute_data:pa_weight',
+        'attribute:pa_width',
+        'attribute_data:pa_width',
+        'attribute:pa_depth',
+        'attribute_data:pa_depth',
+        'attribute:pa_height',
+        'attribute_data:pa_height',
+        'attribute:pa_lifetime',
+        'attribute_data:pa_lifetime',
+        'attribute:pa_material',
+        'attribute_data:pa_material',
+        'attribute:pa_thermostat',
+        'attribute_data:pa_thermostat',
+        'attribute:pa_ip_rating',
+        'attribute_data:pa_ip_rating',
+        'attribute:pa_heating_element',
+        'attribute_data:pa_heating_element',
+        'attribute:pa_control_type',
+        'attribute_data:pa_control_type',
+        'attribute:pa_installation_type',
+        'attribute_data:pa_installation_type',
+        'attribute:pa_series',
+        'attribute_data:pa_series',
     ]
+
     
     # Значения по умолчанию для полей
     DEFAULT_VALUES = {
@@ -155,14 +181,28 @@ class WCFieldsConfig:
         'tax:product_visibility': '',
         'tax:product_tag': '',
         'tax:product_shipping_class': '',
+
+        # Оставляем только для новых атрибутов:
+        'attribute_data:pa_placement': '',
+        'attribute_data:pa_application': '',
+        'attribute_data:pa_warranty': '',
+        'attribute_data:pa_color': '',
+        'attribute_data:pa_country': '',
+        'attribute_data:pa_power': '',
+        'attribute_data:pa_weight': '',
+        'attribute_data:pa_width': '',
+        'attribute_data:pa_depth': '',
+        'attribute_data:pa_height': '',
+        'attribute_data:pa_lifetime': '',
+        'attribute_data:pa_material': '',
+        'attribute_data:pa_thermostat': '',
+        'attribute_data:pa_ip_rating': '',
+        'attribute_data:pa_heating_element': '',
+        'attribute_data:pa_control_type': '',
+        'attribute_data:pa_installation_type': '',
+        'attribute_data:pa_series': '',
         
-        # Данные атрибутов (фиксированные для всех атрибутов)
-        'attribute_data:pa_proizvoditel': '',
-        'attribute_data:pa_sposob-primenenija': '',
-        'attribute_data:pa_tip-narushenij': '',
-        'attribute_data:pa_tip-uchrezhdenij': '',
-        'attribute_data:pa_tip-ustrojstva': '',
-        'attribute_data:pa_zona-primenenija': '',
+
     }
     
     @staticmethod

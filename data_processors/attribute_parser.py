@@ -212,12 +212,43 @@ class AttributeParser:
         # Проверяем частичное соответствие
         normalized_key = self._normalize_key(key)
         
+        # Карта синонимов для частичных совпадений
+        synonym_map = {
+            'габарит': 'dimensions',
+            'размер': 'dimensions',
+            'вес': 'weight',
+            'масса': 'weight',
+            'цвет': 'color',
+            'мощность': 'power',
+            'страна': 'country',
+            'гарантия': 'warranty',
+            'срок службы': 'lifetime',
+            'материал': 'material',
+            'термостат': 'thermostat',
+            'класс защиты': 'ip_rating',
+            'пылевлагозащитенность': 'ip_rating',
+            'нагревательный элемент': 'heating_element',
+            'управление': 'control_type',
+            'установка': 'installation_type',
+            'крепление': 'installation_type',
+            'размещение': 'placement',
+            'применение': 'application',
+        }
+        
         for wc_key, wc_slug in self.wc_attributes.items():
             normalized_wc_key = self._normalize_key(wc_key)
             
-            # Проверяем вхождение
+            # Прямое вхождение
             if normalized_wc_key in normalized_key or normalized_key in normalized_wc_key:
                 return True, wc_slug
+            
+            # Проверяем синонимы
+            for synonym, attribute_type in synonym_map.items():
+                if synonym in normalized_key:
+                    # Ищем соответствующий slug
+                    for attr_key, attr_slug in self.wc_attributes.items():
+                        if attribute_type in attr_slug:
+                            return True, attr_slug
         
         return False, ""
     
@@ -229,20 +260,88 @@ class AttributeParser:
             value: Исходное значение
             
         Returns:
-            str: Нормализованное значение (yes/no для WC)
+            str: Нормализованное значение
         """
         if not value:
             return ""
         
         value_str = str(value).strip()
+        value_lower = value_str.lower()
         
         # Обработка boolean значений для WC атрибутов
-        value_lower = value_str.lower()
         if value_lower in self.boolean_values:
             return self.boolean_values[value_lower]
         
-        # Удаление лишних пробелов
+        # Дополнительная обработка "Да"/"Нет" в разных регистрах
+        if value_lower == 'да':
+            return 'yes'
+        elif value_lower == 'нет':
+            return 'no'
+        elif value_lower == 'true':
+            return 'yes'
+        elif value_lower == 'false':
+            return 'no'
+        
+        # Удаление единиц измерения для числовых значений
+        # Паттерны для очистки
+        patterns = [
+            # Вес
+            (r'(\d+\.?\d*)\s*кг', r'\1'),
+            (r'(\d+\.?\d*)\s*kg', r'\1'),
+            
+            # Размеры
+            (r'(\d+\.?\d*)\s*см', r'\1'),
+            (r'(\d+\.?\d*)\s*см\.', r'\1'),
+            (r'(\d+\.?\d*)\s*cm', r'\1'),
+            (r'(\d+\.?\d*)\s*мм', r'\1'),
+            (r'(\d+\.?\d*)\s*mm', r'\1'),
+            (r'(\d+\.?\d*)\s*м', r'\1'),
+            (r'(\d+\.?\d*)\s*m', r'\1'),
+            
+            # Мощность
+            (r'(\d+\.?\d*)\s*кВт', r'\1'),
+            (r'(\d+\.?\d*)\s*квт', r'\1'),
+            (r'(\d+\.?\d*)\s*Kw', r'\1'),
+            (r'(\d+\.?\d*)\s*kW', r'\1'),
+            (r'(\d+\.?\d*)\s*Вт', r'\1'),
+            (r'(\d+\.?\d*)\s*W', r'\1'),
+            
+            # Время
+            (r'(\d+)\s*год[а]?', r'\1'),
+            (r'(\d+)\s*лет', r'\1'),
+            (r'(\d+)\s*year', r'\1'),
+            (r'(\d+)\s*years', r'\1'),
+            
+            # Температура
+            (r'(\d+\.?\d*)\s*°С', r'\1'),
+            (r'(\d+\.?\d*)\s*°C', r'\1'),
+            (r'(\d+\.?\d*)\s*C', r'\1'),
+            
+            # Другие единицы
+            (r'(\d+\.?\d*)\s*дБ', r'\1'),
+            (r'(\d+\.?\d*)\s*dB', r'\1'),
+            (r'(\d+\.?\d*)\s*м\s*[\u00B2]?', r'\1'),
+            (r'(\d+\.?\d*)\s*м\s*[\u00B3]?\/час', r'\1'),
+        ]
+        
+        for pattern, replacement in patterns:
+            if re.search(pattern, value_str, re.IGNORECASE):
+                result = re.sub(pattern, replacement, value_str, flags=re.IGNORECASE).strip()
+                # Проверяем что получилось число
+                try:
+                    float(result)
+                    return result
+                except ValueError:
+                    pass
+        
+        # Если не число, возвращаем очищенное значение
         value_str = ' '.join(value_str.split())
+        
+        # Капитализируем если все буквы
+        if value_str and value_str.replace(' ', '').isalpha():
+            # Сохраняем регистр для аббревиатур типа IP24
+            if not value_str.isupper():
+                value_str = value_str.capitalize()
         
         return value_str
     
@@ -267,6 +366,8 @@ class AttributeParser:
         elif value_lower in ['no', 'false', 'нет']:
             return 'Нет'
         
+        # Для числовых значений возвращаем как есть
+        # Метод normalize_value удаляет единицы, но для отображения они могут понадобиться
         return value
     
     def parse_and_group(self, characteristics_str: str) -> Dict[str, List[Characteristic]]:
@@ -325,6 +426,7 @@ class AttributeParser:
     def format_for_description(self, characteristics_str: str) -> str:
         """
         Форматирование характеристик для HTML описания
+        Включает ВСЕ характеристики (и WC атрибуты тоже)
         
         Args:
             characteristics_str: Строка характеристик
@@ -333,7 +435,6 @@ class AttributeParser:
             str: HTML с группировкой характеристик
         """
         grouped = self.parse_and_group(characteristics_str)
-        
         if not grouped:
             return ""
         
@@ -354,9 +455,14 @@ class AttributeParser:
                 
                 # Характеристики группы
                 for char in characteristics:
-                    # Используем форматирование для отображения
+                    # Для отображения используем оригинальное форматирование
                     display_value = self._format_value_for_display(char.value)
-                    html_parts.append(f'<li><strong>{char.key}:</strong> {display_value}</li>')
+                    
+                    # Помечаем WC атрибуты специальным классом
+                    if char.is_wc_attribute:
+                        html_parts.append(f'<li class="wc-attribute"><strong>{char.key}:</strong> {display_value}</li>')
+                    else:
+                        html_parts.append(f'<li><strong>{char.key}:</strong> {display_value}</li>')
                 
                 html_parts.append('</ul>')
         
@@ -367,7 +473,6 @@ class AttributeParser:
             html = f'<h3>Технические характеристики</h3>\n{html}'
         
         logger.debug(f"Сформирован HTML описания: {len(html)} символов")
-        
         return html
     
     def format_for_display(self, characteristics_str: str) -> str:
@@ -405,7 +510,7 @@ class AttributeParser:
         # Извлекаем атрибуты WC
         for char in all_characteristics:
             if char.is_wc_attribute and char.wc_attribute_slug:
-                # Для атрибутов WC используем нормализованные значения (yes/no)
+                # Для атрибутов WC используем нормализованные значения
                 wc_attributes[char.wc_attribute_slug] = char.value
                 
                 # Для attribute_data нужно создать строку настроек
