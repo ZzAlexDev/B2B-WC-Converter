@@ -388,6 +388,7 @@ class DocsParser(BaseParser):
             {doc_name}
         </a><br>
         '''
+
     
     def _extract_youtube_id(self, url: str) -> Optional[str]:
         """

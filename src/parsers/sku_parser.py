@@ -65,9 +65,13 @@ class SKUParser(BaseParser):
         ns_code = ns_code_cleaned
         if ns_code_cleaned:
             # НС-код может содержать "НС-" префикс, оставляем как есть
-            if not re.match(r'^[a-zA-ZА-Яа-я0-9\-/_]+$', ns_code_cleaned):
-
-                errors.append(f"НС-код содержит запрещенные символы: '{ns_code_cleaned}'")
+    # Разрешаем: буквы, цифры, дефис, слэш, точка, подчеркивание, пробел, плюс, кириллицу
+            if not re.match(r'^[a-zA-ZА-Яа-я0-9\-/._+ ]+$', sku):
+                # Проверяем на наличие действительно опасных символов
+                dangerous_chars = ['<', '>', '"', "'", ';', '=', '&', '%', '$', '#', '@', '!', '*', '(', ')', '[', ']', '{', '}']
+                has_dangerous = any(char in sku for char in dangerous_chars)
+                if has_dangerous:
+                    errors.append(f"SKU содержит опасные символы: '{sku}'")
         else:
             warnings.append("НС-код не указан")
         

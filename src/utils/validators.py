@@ -114,11 +114,23 @@ def validate_sku(sku_str: str) -> Tuple[Optional[str], List[str]]:
     
     if len(sku) > 100:
         errors.append(f"SKU слишком длинный: '{sku}'")
+        # Обрезаем
+        sku = sku[:100]
     
-    # Проверяем на наличие запрещенных символов
-    # Разрешаем: буквы, цифры, дефис, слэш, точка, подчеркивание
-    if not re.match(r'^[a-zA-Z0-9\-/._]+$', sku):
-        errors.append(f"SKU содержит запрещенные символы: '{sku}'")
+    # Проверяем только на действительно опасные символы
+    dangerous_chars = ['<', '>', '"', "'", ';', '=', '&', '%', '$', '#', '@', '!', '*', '(', ')', '[', ']', '{', '}', '\\']
+    has_dangerous = any(char in sku for char in dangerous_chars)
+    
+    if has_dangerous:
+        errors.append(f"SKU содержит опасные символы: '{sku}'")
+        # Убираем опасные символы
+        for char in dangerous_chars:
+            sku = sku.replace(char, '')
+    
+    # Дополнительно: если есть запятые - заменяем на точки (для цен)
+    if ',' in sku and sku.replace(',', '').replace('.', '').isdigit():
+        # Это похоже на число с запятой (например, цена)
+        sku = sku.replace(',', '.')
     
     return sku, errors
 

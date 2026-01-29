@@ -559,9 +559,11 @@ class SpecsParser(BaseParser):
         html_lines = ["<h2>Технические характеристики</h2>", "<ul>"]
         
         for item in items:
-            html_lines.append(
-                f'<li><strong>{item.key}:</strong> {item.normalized_value}</li>'
-            )
+            # Заменяем табуляции на пробелы
+            key = item.key.replace('\t', ' ')
+            value = item.normalized_value.replace('\t', ' ')
+            
+            html_lines.append(f'<li><strong>{key}:</strong> {value}</li>')
         
         html_lines.append("</ul>")
         
