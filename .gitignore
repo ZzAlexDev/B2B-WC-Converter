@@ -1,106 +1,56 @@
-# ======================
-# ПАПКИ ДЛЯ ИГНОРИРОВАНИЯ
-# ======================
-
-# Виртуальное окружение
-.venv/
-venv/
-env/
-ENV/
-
-# Папка для скачанных файлов (не коммитить изображения и документы!)
-downloads/
-!downloads/.gitkeep  # но сохраняем пустой файл для структуры
-
-# Логи
-logs/
-
-# Временные файлы
-tmp/
-temp/
-*.tmp
-*.temp
-
-# Кэши и служебные файлы
-.cache/
+# Python
 __pycache__/
+data/temp/*
+data/downloads/*
+logs/*.log
+*.csv
+*.xlsx
+*.xls
+*.json
 *.py[cod]
 *$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# IDE и редакторы
+# Virtual Environment
+.env
+venv/
+.venv
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 
-# Операционные системы
+# Project
+data/temp/*
+data/downloads/*
+!data/downloads/.keep
+logs/*.log
+*.csv
+*.xlsx
+*.xls
+*.json
+
+# OS
 .DS_Store
 Thumbs.db
-
-# ======================
-# ФАЙЛЫ ДАННЫХ
-# ======================
-
-# Исходные файлы (большие, не коммитить)
-input/*.xlsx
-input/*.xls
-!input/.gitkeep  # но сохраняем структуру
-
-# Выходные файлы (генерируются автоматически)
-output/*.csv
-output/*.html
-output/*.txt
-output/*.json
-!output/.gitkeep  # но сохраняем структуру
-
-# Конфиденциальные данные
-*.env
-.env.local
-.secrets
-
-# Резервные копии
-*.bak
-*.backup
-
-# ======================
-# ПАКЕТЫ И ЗАВИСИМОСТИ
-# ======================
-
-# Python упаковка
-*.egg
-*.egg-info/
-dist/
-build/
-pip-wheel-metadata/
-
-# Установленные зависимости
-site-packages/
-
-# ======================
-# ТЕСТОВЫЕ И СЛУЖЕБНЫЕ ФАЙЛЫ
-# ======================
-
-# Тестовые данные
-test_data/
-*.test
-*.spec
-
-# Локальные настройки
-local_settings.py
-settings_local.py
-
-# ======================
-# СПЕЦИФИКА ДЛЯ ПРОЕКТА
-# ======================
-
-# Файлы образцов (samples)
-*.sample
-
-# Отчеты обработки
-*.report
-*.log
-
-# Временные файлы конвертации
-*.conv
-*.processing
