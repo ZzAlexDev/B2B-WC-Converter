@@ -66,7 +66,8 @@ class PriceParser(BaseParser):
         warnings = []
         
         # Очищаем значение
-        cleaned_value = self.clean_value(value)
+        
+        cleaned_value = self._clean_price_string(self.clean_value(value))
         
         # Проверяем обязательность
         if not cleaned_value:
@@ -210,3 +211,29 @@ class PriceParser(BaseParser):
                     continue
         
         return None
+    
+    def _clean_price_string(self, price_str: str) -> str:
+        """
+        Очистка строки с ценой от валютных обозначений
+        
+        Args:
+            price_str: Строка с ценой (например "99990 руб.")
+        
+        Returns:
+            Очищенная строка
+        """
+        if not price_str:
+            return ""
+        
+        # Убираем валютные обозначения
+        currency_patterns = [
+            r'\s*руб\.?\s*', r'\s*rub\.?\s*', r'\s*rur\.?\s*',
+            r'\s*р\.\s*', r'\s*₽\s*', r'\s*usd\.?\s*', r'\s*eur\.?\s*',
+            r'\s*€\s*', r'\s*\$\s*'
+        ]
+        
+        cleaned = price_str
+        for pattern in currency_patterns:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
+        
+        return cleaned.strip()

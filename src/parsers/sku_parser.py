@@ -65,7 +65,8 @@ class SKUParser(BaseParser):
         ns_code = ns_code_cleaned
         if ns_code_cleaned:
             # НС-код может содержать "НС-" префикс, оставляем как есть
-            if not re.match(r'^[a-zA-Z0-9\-/_]+$', ns_code_cleaned):
+            if not re.match(r'^[a-zA-ZА-Яа-я0-9\-/_]+$', ns_code_cleaned):
+
                 errors.append(f"НС-код содержит запрещенные символы: '{ns_code_cleaned}'")
         else:
             warnings.append("НС-код не указан")

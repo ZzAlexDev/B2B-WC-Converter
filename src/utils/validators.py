@@ -33,23 +33,39 @@ def validate_price(price_str: str) -> Tuple[Optional[float], List[str]]:
         # Заменяем запятую на точку (десятичный разделитель)
         price_str = price_str.replace(",", ".")
         
-        # Убираем все нецифровые символы кроме точки
-        # Но оставляем точку как десятичный разделитель
+
+        # Убираем все нецифровые символы кроме точки и запятой
+        # Игнорируем "руб.", "RUB", "₽" и другие валютные обозначения
         cleaned = ""
         has_decimal = False
+        
+        # Список игнорируемых валютных обозначений
+        currency_words = ["руб", "rub", "rur", "р.", "₽", "руб.", "rub.", "rur."]
+        
+        # Проверяем наличие валютных обозначений
+        price_lower = price_str.lower()
+        for currency in currency_words:
+            if currency in price_lower:
+                # Убираем валютное обозначение
+                price_str = price_str.lower().replace(currency, "")
         
         for char in price_str:
             if char.isdigit():
                 cleaned += char
-            elif char == '.' and not has_decimal:
-                cleaned += char
+            elif char in ',.' and not has_decimal:
+                # Заменяем запятую на точку
+                cleaned += '.'
                 has_decimal = True
-            elif char in ', ':
-                # Уже обработали
+            elif char in ' \t\n\r':
+                # Игнорируем пробелы
+                continue
+            elif char.isalpha():
+                # Игнорируем буквы (уже убрали валютные обозначения)
                 continue
             else:
-                # Недопустимый символ
+                # Другие символы - ошибка
                 errors.append(f"Недопустимый символ в цене: '{char}'")
+
         
         if not cleaned:
             errors.append("Цена не содержит цифр")
