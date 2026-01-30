@@ -39,13 +39,7 @@ class SKUParser(BaseParser):
             ns_code_value: Значение из колонки "НС-код" (опционально)
         
         Returns:
-            ParseResult с данными:
-            {
-                "article": "Артикул производителя",
-                "ns_code": "НС-код",
-                "sku": "Основной SKU (нс-код или артикул)",
-                "is_ns_code_primary": True/False
-            }
+            ParseResult с данными
         """
         errors = []
         warnings = []
@@ -54,30 +48,38 @@ class SKUParser(BaseParser):
         article_cleaned = self.clean_value(article_value)
         ns_code_cleaned = self.clean_value(ns_code_value)
         
-        # Валидация артикула
-        article, article_errors = validate_sku(article_cleaned)
-        if article_errors:
-            errors.extend([f"Артикул: {err}" for err in article_errors])
-        elif not article_cleaned:
+        # Инициализируем переменные
+        article = article_cleaned
+        ns_code = ns_code_cleaned
+        
+        # Валидация артикула (но не блокируем если есть ошибки)
+        if article_cleaned:
+            article_result, article_errors = validate_sku(article_cleaned)
+            if article_errors:
+                # Добавляем ошибки но не блокируем
+                errors.extend([f"Артикул: {err}" for err in article_errors])
+                # Используем очищенное значение если есть, иначе оригинальное
+                article = article_result if article_result else article_cleaned
+        else:
             warnings.append("Артикул не указан")
         
-        # Валидация НС-кода
-        ns_code = ns_code_cleaned
+        # Валидация НС-кода (также не блокируем)
         if ns_code_cleaned:
-            # НС-код может содержать "НС-" префикс, оставляем как есть
-    # Разрешаем: буквы, цифры, дефис, слэш, точка, подчеркивание, пробел, плюс, кириллицу
-            if not re.match(r'^[a-zA-ZА-Яа-я0-9\-/._+ ]+$', sku):
-                # Проверяем на наличие действительно опасных символов
-                dangerous_chars = ['<', '>', '"', "'", ';', '=', '&', '%', '$', '#', '@', '!', '*', '(', ')', '[', ']', '{', '}']
-                has_dangerous = any(char in sku for char in dangerous_chars)
-                if has_dangerous:
-                    errors.append(f"SKU содержит опасные символы: '{sku}'")
+            # Простая проверка на опасные символы
+            dangerous_chars = ['<', '>', '"', "'", ';', '=', '&', '%', '$', '#', '@', '!', '*', '(', ')', '[', ']', '{', '}', '\\']
+            has_dangerous = any(char in ns_code_cleaned for char in dangerous_chars)
+            if has_dangerous:
+                warnings.append(f"НС-код содержит опасные символы, они будут удалены: '{ns_code_cleaned}'")
+                # Удаляем опасные символы
+                for char in dangerous_chars:
+                    ns_code_cleaned = ns_code_cleaned.replace(char, '')
+                ns_code = ns_code_cleaned
         else:
             warnings.append("НС-код не указан")
         
         # Определяем основной SKU
-        if self.use_ns_code_as_sku and ns_code_cleaned:
-            sku = ns_code_cleaned
+        if self.use_ns_code_as_sku and ns_code:
+            sku = ns_code
             is_ns_code_primary = True
         elif article:
             sku = article
@@ -85,23 +87,22 @@ class SKUParser(BaseParser):
         else:
             sku = ""
             is_ns_code_primary = False
-            if not errors:  # Не добавляем ошибку если уже есть ошибки валидации
+            if not article_cleaned and not ns_code_cleaned:
                 errors.append("Не удалось определить SKU: нет ни артикула, ни НС-кода")
         
         # Проверка на слишком короткий SKU
-        if sku and len(sku) < 3:
+        if sku and len(sku) < 2:
             warnings.append(f"SKU слишком короткий: '{sku}'")
         
         # Проверка на слишком длинный SKU
         if sku and len(sku) > 50:
             warnings.append(f"SKU слишком длинный: '{sku}'")
-            # Обрезаем
             sku = sku[:50]
         
         # Подготовка данных
         data = {
-            "article": article_cleaned,
-            "ns_code": ns_code_cleaned,
+            "article": article,
+            "ns_code": ns_code,
             "sku": sku,
             "is_ns_code_primary": is_ns_code_primary,
             "has_article": bool(article_cleaned),

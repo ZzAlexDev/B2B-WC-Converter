@@ -56,7 +56,7 @@ class WCFormatter:
         "attribute:pa_страна-производства",
         "attribute:pa_гарантийный-срок",
         "attribute:pa_область-применения",
-        "attribute:pa_макс-потребляемая-мощность",
+        "attribute:pa_макс-потреб-мощность",
         "attribute:pa_масса-товара-нетто",
         "attribute:pa_ширина-товара",
         "attribute:pa_глубина-товара",
@@ -138,28 +138,62 @@ class WCFormatter:
             self.logger.error(f"Ошибка форматирования товара #{product.id}: {e}")
             raise
     
+    # def _format_value(self, value: Any) -> str:
+    #     """
+    #     Форматирование значения для CSV
+        
+    #     Args:
+    #         value: Любое значение
+        
+    #     Returns:
+    #         Строка для CSV
+    #     """
+    #     if value is None:
+    #         return ""
+        
+    #     # Приводим к строке
+    #     value_str = str(value)
+        
+    #     # Экранируем кавычки для CSV
+    #     if '"' in value_str or ',' in value_str or '\n' in value_str:
+    #         value_str = f'"{value_str.replace("\"", "\"\"")}"'
+
+        
+    #     return value_str
+
     def _format_value(self, value: Any) -> str:
         """
-        Форматирование значения для CSV
+        Форматирование значения для CSV.
         
         Args:
-            value: Любое значение
+            value: Любое значение.
         
         Returns:
-            Строка для CSV
+            Строка, безопасная для формата CSV.
         """
         if value is None:
             return ""
         
-        # Приводим к строке
         value_str = str(value)
         
-        # Экранируем кавычки для CSV
-        if '"' in value_str or ',' in value_str or '\n' in value_str:
-            value_str = f'"{value_str.replace("\"", "\"\"")}"'
-
+        # 1. Заменяем HTML-сущности на читаемые символы
+        html_entities = {'&nbsp;': ' ', '&plusmn;': '±', '&deg;': '°'}
+        for entity, replacement in html_entities.items():
+            value_str = value_str.replace(entity, replacement)
         
-        return value_str
+        # 2. "Чистим" разрывы строк: заменяем 3+ подряд на 2
+        import re
+        value_str = re.sub(r'\n{3,}', '\n\n', value_str)
+        
+        # 3. Экранируем двойные кавычки (ПРАВИЛО CSV)
+        value_str = value_str.replace('"', '""')
+        
+        # 4. Проверяем, нужно ли оборачивать ячейку в кавычки
+        #    (если есть запятая, кавычка или перенос строки)
+        if ',' in value_str or '"' in value_str or '\n' in value_str:
+            value_str = f'"{value_str}"'
+        
+        return value_str    
     
     def _fill_required_fields(self, csv_row: Dict[str, str], product: Product):
         """Заполнение обязательных полей если они пустые"""
@@ -243,23 +277,31 @@ class WCFormatter:
             # Добавляем поле если его еще нет
             if field_name not in csv_row:
                 csv_row[field_name] = attr_value
+
+
+    # Словарь для сокращения часто используемых слов
+            
     
     def _slugify_attribute(self, text: str) -> str:
         """
-        Генерация slug для имени атрибута
+        Генерация slug для имени атрибута с ограничением длины
         
         Args:
             text: Исходный текст
         
         Returns:
-            Slug для использования в имени поля
+            Slug для использования в имени поля (макс 27 символов)
         """
         import re
         
-        # Транслитерация кириллицы
+        # Если текст пустой
+        if not text or not text.strip():
+            return f"attr_{hash(text) % 1000:04d}"
+        
+        # 1. Транслитерация кириллицы (упрощенная)
         translit_map = {
             'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd',
-            'е': 'e', 'ё': 'yo', 'ж': 'zh', 'з': 'z', 'и': 'i',
+            'е': 'e', 'ё': 'e', 'ж': 'zh', 'з': 'z', 'и': 'i',
             'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n',
             'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't',
             'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch',
@@ -268,21 +310,69 @@ class WCFormatter:
         }
         
         # Приводим к нижнему регистру
-        text = text.lower()
+        text_lower = text.lower()
         
         # Транслитерируем
         transliterated = ""
-        for char in text:
+        for char in text_lower:
             if char in translit_map:
                 transliterated += translit_map[char]
             else:
                 transliterated += char
         
-        # Заменяем пробелы и спецсимволы на дефисы
-        transliterated = re.sub(r'[^\w\s-]', '', transliterated)
-        transliterated = re.sub(r'[-\s]+', '-', transliterated)
+        # 2. Убираем все кроме букв, цифр и дефиса
+        slug = re.sub(r'[^\w\s-]', '', transliterated)
+        slug = re.sub(r'[-\s]+', '-', slug)
+        slug = slug.strip('-')
         
-        return transliterated.strip('-')
+        # 3. СОКРАЩАЕМ ДЛИННЫЕ SLUG (макс 27 символов!)
+        MAX_SLUG_LENGTH = 27  # WooCommerce требует < 28
+        
+        if len(slug) > MAX_SLUG_LENGTH:
+            # Пробуем сократить умно
+            if '-' in slug:
+                # Разбиваем по дефисам и берем первые буквы
+                parts = slug.split('-')
+                shortened_parts = []
+                
+                for part in parts:
+                    if len(part) > 4:
+                        # Берем первые 3-4 буквы длинных слов
+                        shortened_parts.append(part[:4])
+                    else:
+                        shortened_parts.append(part)
+                
+                # Собираем обратно
+                slug = '-'.join(shortened_parts)
+                
+                # Если все еще длинный - берем первые слова
+                if len(slug) > MAX_SLUG_LENGTH:
+                    # Берем только первые 3 слова
+                    first_parts = slug.split('-')[:3]
+                    slug = '-'.join(first_parts)
+            
+            # Если все еще длинный - жесткое обрезание
+            if len(slug) > MAX_SLUG_LENGTH:
+                slug = slug[:MAX_SLUG_LENGTH]
+                # Убираем обрезанный дефис в конце
+                if slug.endswith('-'):
+                    slug = slug[:-1]
+        
+        # 4. Если slug пустой - генерируем короткий
+        if not slug:
+            # Создаем короткий slug на основе хеша
+            import hashlib
+            hash_obj = hashlib.md5(text.encode('utf-8'))
+            hash_hex = hash_obj.hexdigest()[:6]
+            slug = f"attr_{hash_hex}"
+        
+        # 5. Убеждаемся что нет двойных дефисов
+        slug = re.sub(r'--+', '-', slug)
+        
+        return slug.lower()
+
+
+
     
     def _process_dates(self, csv_row: Dict[str, str]):
         """Обработка дат публикации"""
