@@ -1,0 +1,53 @@
+{
+  "processing": {
+    "batch_size": 50,
+    "max_images": 5,
+    "skip_on_error": true,
+    "save_intermediate": true
+  },
+  
+  "attributes": {
+    "main": [
+      "Область применения",
+      "Гарантийный срок", 
+      "Цвет корпуса",
+      "Страна производства",
+      "Макс. потребляемая мощность",
+      "Масса товара (нетто)",
+      "Ширина товара",
+      "Глубина товара",
+      "Высота товара",
+      "Срок службы"
+    ]
+  },
+  
+  "normalization": {
+    "true": "Да",
+    "false": "Нет", 
+    "yes": "Да",
+    "no": "Нет",
+    "да": "Да",
+    "нет": "Нет"
+  },
+  
+  "wc": {
+    "default_values": {
+      "post_status": "publish",
+      "comment_status": "closed",
+      "post_type": "product",
+      "tax:product_type": "simple",
+      "stock_status": "instock",
+      "downloadable": "no",
+      "virtual": "no",
+      "backorders": "no",
+      "sold_individually": "no",
+      "manage_stock": "no",
+      "tax_status": "taxable",
+      "download_limit": "'-1",
+      "download_expiry": "'-1",
+      "menu_order": "0",
+      "post_author": "1",
+      "post_date_start": "02.02.2026 12:12:00"
+    }
+  }
+}

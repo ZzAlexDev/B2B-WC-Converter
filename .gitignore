@@ -39,10 +39,10 @@ data/temp/*
 data/downloads/*
 !data/downloads/.keep
 logs/*.log
-*.csv
-*.xlsx
-*.xls
-*.json
+# *.csv
+# *.xlsx
+# *.xls
+# *.json
 
 # OS
 .DS_Store

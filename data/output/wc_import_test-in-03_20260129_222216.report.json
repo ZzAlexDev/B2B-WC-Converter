@@ -1,0 +1,16 @@
+{
+  "export_date": "2026-01-29T22:22:16.025529",
+  "csv_file": "data\\output\\wc_import_test-in-03_20260129_222216.csv",
+  "results": {
+    "total_products": 23,
+    "exported": 23,
+    "failed": 0,
+    "errors": [],
+    "output_path": "data\\output\\wc_import_test-in-03_20260129_222216.csv",
+    "file_size": 273015
+  },
+  "summary": {
+    "success_rate": 100.0,
+    "errors_count": 0
+  }
+}
