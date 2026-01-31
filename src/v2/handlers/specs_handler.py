@@ -2,21 +2,24 @@
 SpecsHandler - обработчик характеристик для B2B-WC Converter v2.0.
 Обрабатывает: вес, габариты, атрибуты фильтров из поля "Характеристики".
 """
-import re
-from typing import Dict, Any, List, Tuple
-import logging
-
-from .base_handler import BaseHandler
+from typing import Dict, Any
 
 # Используем относительные импорты
 try:
+    from .base_handler import BaseHandler
     from ..models import RawProduct
     from ..config_manager import ConfigManager
+    from ..utils.logger import get_logger
+    from ..utils.validators import parse_specifications
 except ImportError:
+    from base_handler import BaseHandler
     from models import RawProduct
     from config_manager import ConfigManager
+    from utils.logger import get_logger
+    from utils.validators import parse_specifications
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
 
 class SpecsHandler(BaseHandler):
     """
@@ -48,7 +51,7 @@ class SpecsHandler(BaseHandler):
         """
         result = {}
         
-        # 1. Парсим характеристики
+        # 1. Парсим характеристики с помощью утилиты
         specs = self._parse_specifications(raw_product.Характеристики)
         
         # 2. Обрабатываем стандартные поля (вес, габариты)
@@ -80,29 +83,25 @@ class SpecsHandler(BaseHandler):
         if not specs_string or not specs_string.strip():
             return {}
         
-        specs = {}
-        string = specs_string.strip()
+        # Используем утилиту для парсинга
+        specs = parse_specifications(specs_string)
         
-        # Разные разделители в строке
-        # Форматы: "Ключ: Значение / Ключ: Значение" или "Ключ: Значение, Ключ: Значение"
-        # Сначала нормализуем разделители
-        string = string.replace(';', '/').replace(',', '/')
+        # Нормализуем ключи для сопоставления с конфигом
+        normalized_specs = {}
+        for key, value in specs.items():
+            normalized_key = self._normalize_spec_key(key)
+            
+            # Нормализуем значение Да/Нет
+            if value.lower() in ['да', 'yes', '1', 'true', 'есть']:
+                normalized_value = 'Да'
+            elif value.lower() in ['нет', 'no', '0', 'false', 'отсутствует']:
+                normalized_value = 'Нет'
+            else:
+                normalized_value = value
+            
+            normalized_specs[normalized_key] = normalized_value
         
-        # Разбиваем по "/"
-        parts = [part.strip() for part in string.split('/') if part.strip()]
-        
-        for part in parts:
-            if ':' in part:
-                key, value = part.split(':', 1)
-                key = key.strip()
-                value = value.strip()
-                
-                if key and value:
-                    # Нормализуем ключ (убираем лишние пробелы, приводим к стандартному виду)
-                    normalized_key = self._normalize_spec_key(key)
-                    specs[normalized_key] = value
-        
-        return specs
+        return normalized_specs
     
     def _normalize_spec_key(self, key: str) -> str:
         """
@@ -160,7 +159,7 @@ class SpecsHandler(BaseHandler):
             if spec_key in specs:
                 value_str = specs[spec_key]
                 
-                # Извлекаем числовое значение и единицу измерения
+                # Используем метод конфиг менеджера для извлечения значения и единицы
                 numeric_value, unit = self.config_manager.extract_unit(value_str)
                 
                 if numeric_value:
@@ -192,56 +191,13 @@ class SpecsHandler(BaseHandler):
             if spec_key in specs:
                 value = specs[spec_key]
                 
-                # Нормализуем значение для Да/Нет
-                if spec_key in ["Наличие", "В наличии", "Есть в наличии"]:
-                    normalized_value = self.config_manager.normalize_yes_no_value(value)
-                else:
-                    normalized_value = value.strip()
+                # Нормализуем значение (уже сделано в _parse_specifications)
+                normalized_value = value.strip()
                 
                 # Добавляем атрибут
                 result[woo_attr] = normalized_value
         
         return result
-    
-    def _extract_numeric_value(self, value_str: str) -> Tuple[str, str]:
-        """
-        Извлекает числовое значение и единицу измерения из строки.
-        
-        Args:
-            value_str: Строка со значением (например, "10 кг")
-            
-        Returns:
-            Кортеж (числовое значение, единица измерения)
-        """
-        if not value_str:
-            return "", ""
-        
-        # Удаляем лишние пробелы
-        value_str = value_str.strip()
-        
-        # Ищем числовую часть (целые и десятичные числа)
-        # Поддерживаем форматы: 10, 10.5, 10,5, 10 кг, 10.5см и т.д.
-        match = re.search(r'([0-9]+[.,]?[0-9]*)', value_str.replace(' ', ''))
-        
-        if not match:
-            return value_str, ""
-        
-        numeric_value = match.group(1)
-        
-        # Определяем единицу измерения
-        units = {
-            'кг': 'kg', 'г': 'g', 'гр': 'g',
-            'см': 'cm', 'мм': 'mm', 'м': 'm',
-            'л': 'l', 'мл': 'ml',
-            'шт': 'pcs', 'уп': 'pack'
-        }
-        
-        # Ищем единицу измерения в строке
-        for unit_ru, unit_en in units.items():
-            if unit_ru in value_str.lower():
-                return numeric_value, unit_en
-        
-        return numeric_value, ""
     
     def cleanup(self) -> None:
         """

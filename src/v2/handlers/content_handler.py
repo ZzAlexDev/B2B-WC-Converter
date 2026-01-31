@@ -5,19 +5,31 @@ ContentHandler - обработчик текстового контента дл
 import re
 from typing import Dict, Any, List
 import logging
-from urllib.parse import urlparse
-
-from .base_handler import BaseHandler
 
 # Используем относительные импорты
 try:
+    from .base_handler import BaseHandler
     from ..models import RawProduct
     from ..config_manager import ConfigManager
+    from ..utils.logger import get_logger
+    from ..utils.validators import (
+        extract_youtube_id,
+        normalize_yes_no,
+        parse_specifications
+    )
 except ImportError:
+    from base_handler import BaseHandler
     from models import RawProduct
     from config_manager import ConfigManager
+    from utils.logger import get_logger
+    from utils.validators import (
+        extract_youtube_id,
+        normalize_yes_no,
+        parse_specifications
+    )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
 
 class ContentHandler(BaseHandler):
     """
@@ -79,34 +91,19 @@ class ContentHandler(BaseHandler):
         if cache_key in self.specs_cache:
             return self.specs_cache[cache_key].copy()
         
-        specs = {}
-        string = specs_string.strip()
+        # Используем утилиту для парсинга
+        specs = parse_specifications(specs_string)
         
-        # Нормализуем разделители
-        string = string.replace(';', '/').replace(',', '/')
-        
-        # Разбиваем по "/"
-        parts = [part.strip() for part in string.split('/') if part.strip()]
-        
-        for part in parts:
-            if ':' in part:
-                key, value = part.split(':', 1)
-                key = key.strip()
-                value = value.strip()
-                
-                if key and value:
-                    # Нормализуем значения Да/Нет
-                    if value.lower() in ['да', 'yes', '1', 'true', 'есть']:
-                        value = 'Да'
-                    elif value.lower() in ['нет', 'no', '0', 'false', 'отсутствует']:
-                        value = 'Нет'
-                    
-                    specs[key] = value
+        # Нормализуем значения Да/Нет
+        normalized_specs = {}
+        for key, value in specs.items():
+            normalized_value = normalize_yes_no(value)
+            normalized_specs[key] = normalized_value
         
         # Сохраняем в кэш
-        self.specs_cache[cache_key] = specs.copy()
+        self.specs_cache[cache_key] = normalized_specs.copy()
         
-        return specs
+        return normalized_specs
     
     def _build_html_content(self, raw_product: RawProduct, specs: Dict[str, str]) -> str:
         """
@@ -312,8 +309,8 @@ class ContentHandler(BaseHandler):
         Returns:
             HTML строка
         """
-        # Извлекаем YouTube ID
-        youtube_id = self._extract_youtube_id(video_url)
+        # Используем утилиту для извлечения YouTube ID
+        youtube_id = extract_youtube_id(video_url)
         
         if not youtube_id:
             # Простая ссылка, если не YouTube
@@ -345,28 +342,6 @@ class ContentHandler(BaseHandler):
         )
         
         return html
-    
-    def _extract_youtube_id(self, url: str) -> str:
-        """
-        Извлекает YouTube ID из URL.
-        
-        Args:
-            url: YouTube URL
-            
-        Returns:
-            YouTube ID или пустая строка
-        """
-        patterns = [
-            r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})',
-            r'youtube\.com\/v\/([a-zA-Z0-9_-]{11})'
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, url)
-            if match:
-                return match.group(1)
-        
-        return ""
     
     def _build_additional_info_html(self, raw_product: RawProduct) -> str:
         """
@@ -407,13 +382,8 @@ class ContentHandler(BaseHandler):
             else:
                 exclusive_value = raw_product.Эксклюзив
             
-            # Нормализуем
-            if exclusive_value.lower() in ['да', 'yes', '1', 'true']:
-                exclusive_display = 'Да'
-            elif exclusive_value.lower() in ['нет', 'no', '0', 'false']:
-                exclusive_display = 'Нет'
-            else:
-                exclusive_display = exclusive_value
+            # Используем утилиту для нормализации
+            exclusive_display = normalize_yes_no(exclusive_value)
             
             html_parts.append(f'<li><strong>Эксклюзив:</strong> {exclusive_display}</li>')
         
