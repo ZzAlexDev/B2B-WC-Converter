@@ -3,7 +3,6 @@ ConverterV2 - главный класс-оркестратор для B2B-WC Con
 Управляет всем процессом конвертации: чтение, обработка, экспорт.
 """
 import csv
-import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -12,8 +11,9 @@ import sys
 from .models import RawProduct, WooProduct, ProcessingStats
 from .config_manager import ConfigManager
 from .aggregator import Aggregator
+from .utils.logger import setup_logging, get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ConverterV2:
@@ -39,22 +39,21 @@ class ConverterV2:
     
     def _setup_logging(self) -> None:
         """Настраивает логирование."""
-        log_dir = Path("data/logs")
-        log_dir.mkdir(parents=True, exist_ok=True)
-        
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_file = log_dir / f"converter_{timestamp}.log"
-        
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(log_file, encoding='utf-8'),
-                logging.StreamHandler(sys.stdout)
-            ]
-        )
-        
+        log_file = setup_logging()
         logger.info(f"Конвертер инициализирован, логи в {log_file}")
+    
+    def _load_configuration(self) -> None:
+        """Загружает конфигурацию."""
+        try:
+            self.config_manager = ConfigManager.from_directory(str(self.config_path))
+            self.aggregator = Aggregator(self.config_manager)
+            logger.info("Конфигурация загружена успешно")
+        except Exception as e:
+            logger.error(f"Ошибка загрузки конфигурации: {e}")
+            raise
+    
+    # ... остальные методы без изменений ...
+    
     
     def _load_configuration(self) -> None:
         """Загружает конфигурацию."""

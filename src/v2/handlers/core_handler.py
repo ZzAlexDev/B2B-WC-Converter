@@ -4,20 +4,22 @@ CoreHandler - основной обработчик для B2B-WC Converter v2.0
 """
 import re
 from typing import Dict, Any
-import logging
-from urllib.parse import urlparse
-
-from .base_handler import BaseHandler
 
 # Используем относительные импорты
 try:
+    from .base_handler import BaseHandler
     from ..models import RawProduct
     from ..config_manager import ConfigManager
+    from ..utils.logger import get_logger
+    from ..utils.validators import generate_slug, extract_price
 except ImportError:
+    from base_handler import BaseHandler
     from models import RawProduct
     from config_manager import ConfigManager
+    from utils.logger import get_logger
+    from utils.validators import generate_slug, extract_price
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class CoreHandler(BaseHandler):
@@ -116,12 +118,12 @@ class CoreHandler(BaseHandler):
         Returns:
             Уникальный slug
         """
-        # Базовая транслитерация и очистка
-        slug = self._slugify(title)
+        # Используем утилиту для генерации slug
+        slug = generate_slug(title)
         
         # Если slug пустой, используем артикул
         if not slug:
-            slug = self._slugify(sku)
+            slug = generate_slug(sku)
         
         # Проверяем уникальность
         if slug in self.slug_cache:
@@ -132,60 +134,6 @@ class CoreHandler(BaseHandler):
             slug = f"{slug}-{self.slug_counter[slug]}"
         else:
             self.slug_cache[slug] = sku
-        
-        return slug
-    
-    def _slugify(self, text: str) -> str:
-        """
-        Преобразует текст в slug.
-        
-        Args:
-            text: Исходный текст
-            
-        Returns:
-            slug
-        """
-        if not text:
-            return ""
-        
-        # Приводим к нижнему регистру
-        text = text.lower()
-        
-        # Заменяем кириллические символы на латинские
-        cyr_to_lat = {
-            'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd',
-            'е': 'e', 'ё': 'yo', 'ж': 'zh', 'з': 'z', 'и': 'i',
-            'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n',
-            'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't',
-            'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch',
-            'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '',
-            'э': 'e', 'ю': 'yu', 'я': 'ya',
-            ' ': '-', '_': '-', '.': '-', ',': '-', ';': '-',
-            ':': '-', '!': '', '?': '', '"': '', "'": '',
-            '(': '', ')': '', '[': '', ']': '', '{': '', '}': '',
-            '/': '-', '\\': '-', '@': '-', '#': '', '$': '',
-            '%': '', '^': '', '&': '-', '*': '', '+': '-',
-            '=': '-', '<': '', '>': '', '|': '-'
-        }
-        
-        result = []
-        for char in text:
-            if char in cyr_to_lat:
-                result.append(cyr_to_lat[char])
-            elif char.isalnum() or char == '-':
-                result.append(char)
-        
-        slug = ''.join(result)
-        
-        # Убираем множественные дефисы
-        slug = re.sub(r'-+', '-', slug)
-        
-        # Убираем дефисы в начале и конце
-        slug = slug.strip('-')
-        
-        # Ограничиваем длину
-        if len(slug) > 200:
-            slug = slug[:200].rstrip('-')
         
         return slug
     
@@ -226,13 +174,10 @@ class CoreHandler(BaseHandler):
         if not price_str:
             return {"regular_price": ""}
         
-        # Ищем числа в строке (с поддержкой десятичных разделителей)
-        price_match = re.search(r'(\d+[\.,]?\d*)', price_str.replace(' ', ''))
+        # Используем утилиту для извлечения цены
+        price, _ = extract_price(price_str)
         
-        if price_match:
-            # Заменяем запятую на точку для десятичных чисел
-            price = price_match.group(1).replace(',', '.')
-            
+        if price:
             # Получаем разделитель десятичных из конфига
             decimal_sep = self.config_manager.get_setting('processing.decimal_separator', '.')
             
@@ -308,7 +253,7 @@ class CoreHandler(BaseHandler):
         else:
             value = exclusive_str
         
-        # Нормализуем значение
+        # Используем утилиту для нормализации
         normalized = self.config_manager.normalize_yes_no_value(value)
         
         return {"meta:эксклюзив": normalized}
@@ -389,13 +334,21 @@ class CoreHandler(BaseHandler):
         # Генерируем остальные мета-поля из конфига
         meta_fields = self.config_manager.seo_templates.get("meta_fields", {})
         for meta_field, template in meta_fields.items():
-            if template.startswith("{") and template.endswith("}"):
+            if isinstance(template, str) and template.startswith("{") and template.endswith("}"):
                 # Это ссылка на другой шаблон
                 template_name = template[1:-1]
                 if template_name in result:
                     result[meta_field] = result[template_name]
                 else:
-                    result[meta_field] = template
+                    # Попробуем найти в основных шаблонах
+                    for seo_field in seo_fields:
+                        if seo_field == template_name:
+                            seo_field_name = f"meta:_yoast_wpseo_{seo_field.replace('_template', '')}"
+                            if seo_field_name in result:
+                                result[meta_field] = result[seo_field_name]
+                                break
+                    else:
+                        result[meta_field] = template
             else:
                 # Статическое значение
                 result[meta_field] = template

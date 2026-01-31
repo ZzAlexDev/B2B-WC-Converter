@@ -4,19 +4,19 @@
 """
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
-import logging
-from pathlib import Path
 
 # Используем относительные импорты
 try:
     from ..models import RawProduct
     from ..config_manager import ConfigManager
+    from ..utils.logger import get_logger
 except ImportError:
     # Для случая, когда импортируем напрямую
     from models import RawProduct
     from config_manager import ConfigManager
+    from utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class BaseHandler(ABC):
     """
