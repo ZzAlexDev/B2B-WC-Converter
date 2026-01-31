@@ -27,13 +27,11 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-
 # Project
 data/temp/*
 data/downloads/*
@@ -43,7 +41,13 @@ logs/*.log
 *.xlsx
 *.xls
 *.json
-
 # OS
 .DS_Store
 Thumbs.db
+MANIFEST
+env/
+# Data
+data/downloads/
+data/logs/
+# Logs
+*.log
