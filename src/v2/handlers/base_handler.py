@@ -7,12 +7,16 @@ from typing import Dict, Any, Optional
 import logging
 from pathlib import Path
 
-# Абсолютные импорты внутри пакета v2
-from v2.models import RawProduct
-from v2.config_manager import ConfigManager
+# Используем относительные импорты
+try:
+    from ..models import RawProduct
+    from ..config_manager import ConfigManager
+except ImportError:
+    # Для случая, когда импортируем напрямую
+    from models import RawProduct
+    from config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
-
 
 class BaseHandler(ABC):
     """

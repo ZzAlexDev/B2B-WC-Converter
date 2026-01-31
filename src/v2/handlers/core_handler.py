@@ -8,8 +8,14 @@ import logging
 from urllib.parse import urlparse
 
 from .base_handler import BaseHandler
-from ..models import RawProduct
-from ..config_manager import ConfigManager
+
+# Используем относительные импорты
+try:
+    from ..models import RawProduct
+    from ..config_manager import ConfigManager
+except ImportError:
+    from models import RawProduct
+    from config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
