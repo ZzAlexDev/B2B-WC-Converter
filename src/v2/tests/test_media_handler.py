@@ -63,9 +63,10 @@ def test_split_image_urls(handler):
     ]
     
     for urls_str, expected in test_cases:
-        result = handler._MediaHandler__split_image_urls(urls_str)
+        # ИСПРАВЛЕНО: одно подчеркивание вместо двух
+        result = handler._split_image_urls(urls_str)
         status = "✅" if result == expected else "❌"
-        print(f"{status} '{urlls_str[:30]}...' -> {len(result)} URL (ожидалось: {len(expected)})")
+        print(f"{status} '{urls_str[:30]}...' -> {len(result)} URL (ожидалось: {len(expected)})")
     
     return handler
 
@@ -83,7 +84,8 @@ def test_generate_slug_from_title(handler):
     ]
     
     for title, expected in test_cases:
-        result = handler._MediaHandler__generate_slug_from_title(title)
+        # ИСПРАВЛЕНО: одно подчеркивание вместо двух
+        result = handler._generate_slug_from_title(title)
         # Проверяем только что slug не пустой для непустых названий
         if title:
             status = "✅" if result else "❌"
@@ -108,7 +110,8 @@ def test_extract_youtube_id(handler):
     ]
     
     for url, expected in test_cases:
-        result = handler._MediaHandler__extract_youtube_id(url)
+        # ИСПРАВЛЕНО: одно подчеркивание вместо двух
+        result = handler._extract_youtube_id(url)
         status = "✅" if result == expected else "❌"
         print(f"{status} '{url[:30]}...' -> '{result}' (ожидалось: '{expected}')")
     
@@ -132,7 +135,8 @@ def test_process_images():
         )
         
         # Мокаем скачивание изображений
-        with patch.object(handler, '_MediaHandler__download_images', return_value=[]):
+        # ИСПРАВЛЕНО: одно подчеркивание вместо двух
+        with patch.object(handler, '_download_images', return_value=[]):
             result = handler.process(product)
             
             if "images" in result:
@@ -270,7 +274,8 @@ def test_full_processing():
         )
         
         # Мокаем скачивание изображений
-        with patch.object(handler, '_MediaHandler__download_images', return_value=[]):
+        # ИСПРАВЛЕНО: одно подчеркивание вместо двух
+        with patch.object(handler, '_download_images', return_value=[]):
             result = handler.process(product)
         
         print("✅ Проверка полей:")

@@ -66,7 +66,8 @@ def test_parse_specifications(handler):
     ]
     
     for specs_str, expected in test_cases:
-        result = handler._ContentHandler__parse_specifications(specs_str)
+        # ИСПРАВЛЕНО: одно подчеркивание вместо двух
+        result = handler._parse_specifications(specs_str)
         
         # Проверяем ключи
         keys_match = set(result.keys()) == set(expected.keys())
@@ -102,7 +103,8 @@ def test_process_article(handler):
     ]
     
     for input_html, expected in test_cases:
-        result = handler._ContentHandler__process_article(input_html)
+        # ИСПРАВЛЕНО: одно подчеркивание вместо двух
+        result = handler._process_article(input_html)
         status = "✅" if result == expected else "❌"
         print(f"{status} Вход: '{input_html[:20]}...' -> '{result[:20]}...'")
     
@@ -119,7 +121,8 @@ def test_build_specifications_html(handler):
         "Гарантия": "2 года"
     }
     
-    result = handler._ContentHandler__build_specifications_html(specs)
+    # ИСПРАВЛЕНО: одно подчеркивание вместо двух
+    result = handler._build_specifications_html(specs)
     
     print("✅ Сгенерированный HTML характеристик:")
     print(f"Длина: {len(result)} символов")
@@ -143,7 +146,8 @@ def test_collect_documents(handler):
         Инструкции="https://example.com/instructions.pdf"
     )
     
-    result = handler._ContentHandler__collect_documents(product)
+    # ИСПРАВЛЕНО: одно подчеркивание вместо двух
+    result = handler._collect_documents(product)
     
     print(f"✅ Найдено документов: {len(result)}")
     
@@ -172,7 +176,8 @@ def test_extract_youtube_id(handler):
     ]
     
     for url, expected in test_cases:
-        result = handler._ContentHandler__extract_youtube_id(url)
+        # ИСПРАВЛЕНО: одно подчеркивание вместо двух
+        result = handler._extract_youtube_id(url)
         status = "✅" if result == expected else "❌"
         print(f"{status} '{url[:30]}...' -> '{result}'")
     
@@ -191,7 +196,8 @@ def test_build_additional_info_html(handler):
         Эксклюзив="Эксклюзив - Да"
     )
     
-    result = handler._ContentHandler__build_additional_info_html(product)
+    # ИСПРАВЛЕНО: одно подчеркивание вместо двух
+    result = handler._build_additional_info_html(product)
     
     print("✅ Сгенерированный HTML дополнительной информации:")
     print(f"Длина: {len(result)} символов")

@@ -84,7 +84,8 @@ def test_validate_raw_product(converter):
     ]
     
     for test in test_cases:
-        result = converter._ConverterV2__validate_raw_product(test["product"])
+        # ИСПРАВЛЕНО: одно подчеркивание вместо двух
+        result = converter._validate_raw_product(test["product"])
         status = "✅" if result == test["expected"] else "❌"
         print(f"{status} {test['description']}: {result} (ожидалось: {test['expected']})")
     
@@ -170,8 +171,8 @@ def test_export_to_csv(converter):
     output_path = Path(temp_file.name)
     
     try:
-        # Экспортируем
-        converter._ConverterV2__export_to_csv(woo_products, output_path)
+        # ИСПРАВЛЕНО: одно подчеркивание вместо двух
+        converter._export_to_csv(woo_products, output_path)
         
         # Проверяем результат
         with open(output_path, 'r', encoding='utf-8') as f:

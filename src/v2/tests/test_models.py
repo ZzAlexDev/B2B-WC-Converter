@@ -2,6 +2,7 @@
 Тестирование моделей данных.
 """
 import sys
+
 from pathlib import Path
 
 # Добавляем src в путь для импортов
