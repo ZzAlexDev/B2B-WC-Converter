@@ -64,7 +64,12 @@ class Aggregator:
                 
                 if result:
                     handler_results[handler_name] = result
-                    logger.debug(f"  {handler_name}: обработано {len(result)} полей")
+                    # ОТЛАДКА: что возвращает SpecsHandler
+                    if handler_name == 'SpecsHandler':
+                        print(f"\n[DEBUG] === SpecsHandler вернул ===")
+                        for key, val in result.items():
+                            print(f"  '{key}': '{val}'")
+                        print(f"=== Всего {len(result)} полей ===\n")
                 else:
                     logger.warning(f"  {handler_name}: вернул пустой результат")
                     
@@ -78,6 +83,15 @@ class Aggregator:
         
         # Создаем WooProduct
         woo_product = self._create_woo_product(merged_data)
+        
+        # ОТЛАДКА: что в итоге в WooProduct
+        print(f"\n[DEBUG] === Итоговый WooProduct ===")
+        print(f"Атрибуты: {woo_product.attributes}")
+        print(f"Всего атрибутов: {len(woo_product.attributes)}")
+        if woo_product.attributes:
+            for key, value in woo_product.attributes.items():
+                print(f"  '{key}': '{value}'")
+        print(f"=== Конец отладки ===\n")
         
         # Применяем дефолтные значения
         self._apply_default_values(woo_product)
@@ -100,9 +114,15 @@ class Aggregator:
         """
         merged = {}
         
+        print(f"[DEBUG Aggregator] Объединяю результаты от {len(handler_results)} обработчиков")
+        
         for handler_name, result in handler_results.items():
-            # Проверяем конфликты полей
+            print(f"\n[DEBUG] Обработчик '{handler_name}' вернул {len(result)} полей:")
+            
             for key, value in result.items():
+                print(f"  '{key}': '{value}'")
+                
+                # Проверяем конфликты полей
                 if key in merged and merged[key] != value:
                     logger.warning(f"Конфликт поля '{key}': "
                                   f"было '{merged[key]}', стало '{value}' "
@@ -111,6 +131,7 @@ class Aggregator:
             # Объединяем
             merged.update(result)
         
+        print(f"\n[DEBUG] Итого объединено {len(merged)} полей")
         return merged
     
     def _create_woo_product(self, data: Dict[str, Any]) -> WooProduct:
@@ -124,6 +145,8 @@ class Aggregator:
             Экземпляр WooProduct
         """
         woo_product = WooProduct()
+        
+        print(f"[DEBUG _create_woo_product] Создаю WooProduct из {len(data)} полей")
         
         # Заполняем основные поля
         for key, value in data.items():
@@ -140,6 +163,8 @@ class Aggregator:
             key: Ключ поля
             value: Значение поля
         """
+        print(f"[DEBUG _set_woo_product_field] Ключ: '{key}', Значение: '{value}'")
+        
         # Определяем тип поля
         if key.startswith('tax:'):
             # Таксономии

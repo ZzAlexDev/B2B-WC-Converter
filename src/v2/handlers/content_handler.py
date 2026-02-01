@@ -59,19 +59,25 @@ class ContentHandler(BaseHandler):
         Returns:
             Словарь с полем post_content (HTML)
         """
+        from ..utils.validators import safe_getattr
+        
         result = {}
+
         
         # 1. Парсим характеристики для использования в контенте
-        specs = self._parse_specifications(raw_product.Характеристики)
+        specs_str = safe_getattr(raw_product, "Характеристики")
+        specs = self._parse_specifications(specs_str)
         
         # 2. Собираем HTML контент
-        html_content = self._build_html_content(raw_product, specs)
+        article_html = safe_getattr(raw_product, "Статья")
+        html_content = self._build_html_content(raw_product, specs, article_html)
         
         result["post_content"] = html_content
         
         logger.debug(f"ContentHandler обработал продукт {raw_product.НС_код}: "
                     f"{len(html_content)} символов HTML")
         return result
+
     
     def _parse_specifications(self, specs_string: str) -> Dict[str, str]:
         """
@@ -105,13 +111,14 @@ class ContentHandler(BaseHandler):
         
         return normalized_specs
     
-    def _build_html_content(self, raw_product: RawProduct, specs: Dict[str, str]) -> str:
+    def _build_html_content(self, raw_product: RawProduct, specs: Dict[str, str], article_html: str) -> str:
         """
         Собирает HTML контент из различных источников.
         
         Args:
             raw_product: Сырые данные продукта
             specs: Словарь характеристик
+            article_html: HTML статьи
             
         Returns:
             HTML строка
@@ -119,9 +126,10 @@ class ContentHandler(BaseHandler):
         html_parts = []
         
         # Блок 1: HTML из статьи
-        article_html = self._process_article(raw_product.Статья)
-        if article_html:
-            html_parts.append(article_html)
+        processed_article = self._process_article(article_html)
+        if processed_article:
+            html_parts.append(processed_article)
+
         
         # Блок 2: Технические характеристики
         specs_html = self._build_specifications_html(specs)

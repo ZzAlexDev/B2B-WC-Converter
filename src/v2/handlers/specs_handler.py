@@ -2,24 +2,21 @@
 SpecsHandler - обработчик характеристик для B2B-WC Converter v2.0.
 Обрабатывает: вес, габариты, атрибуты фильтров из поля "Характеристики".
 """
-from typing import Dict, Any
+import re
+from typing import Dict, Any, List, Tuple
+import logging
+
+from .base_handler import BaseHandler
 
 # Используем относительные импорты
 try:
-    from .base_handler import BaseHandler
     from ..models import RawProduct
     from ..config_manager import ConfigManager
-    from ..utils.logger import get_logger
-    from ..utils.validators import parse_specifications
 except ImportError:
-    from base_handler import BaseHandler
     from models import RawProduct
     from config_manager import ConfigManager
-    from utils.logger import get_logger
-    from utils.validators import parse_specifications
 
-logger = get_logger(__name__)
-
+logger = logging.getLogger(__name__)
 
 class SpecsHandler(BaseHandler):
     """
@@ -42,66 +39,51 @@ class SpecsHandler(BaseHandler):
     def process(self, raw_product: RawProduct) -> Dict[str, Any]:
         """
         Обрабатывает характеристики товара.
-        
-        Args:
-            raw_product: Сырые данные продукта
-            
-        Returns:
-            Словарь с полями weight, height, width, length и атрибутами
         """
+        
+        print(f"[DEBUG] !!!!!! RawProduct.Характеристики (полностью):")
+        print(raw_product.Характеристики)
+
+
         result = {}
         
-        # 1. Парсим характеристики с помощью утилиты
+        # 1. Парсим характеристики
         specs = self._parse_specifications(raw_product.Характеристики)
         
+        # ДОБАВЬ ОТЛАДКУ
+        print(f"[DEBUG SpecsHandler] Все характеристики ({len(specs)}):")
+        for key, value in specs.items():
+            print(f"  '{key}': '{value}'")
+        
         # 2. Обрабатываем стандартные поля (вес, габариты)
-        result.update(self._process_standard_fields(specs))
+        std_fields = self._process_standard_fields(specs)
+        print(f"[DEBUG] Стандартные поля: {std_fields}")
+        result.update(std_fields)
         
         # 3. Обрабатываем атрибуты WooCommerce
-        result.update(self._process_woocommerce_attributes(specs))
+        wc_attrs = self._process_woocommerce_attributes(specs)
+        print(f"[DEBUG] Атрибуты WooCommerce: {wc_attrs}")
+        result.update(wc_attrs)
         
-        # 4. Сохраняем все характеристики в meta-поле для справки
-        if specs:
-            result["meta:все_характеристики"] = " | ".join(
-                [f"{k}: {v}" for k, v in specs.items()]
-            )
-        
-        logger.debug(f"SpecsHandler обработал продукт {raw_product.НС_код}: "
-                    f"{len(specs)} характеристик, {len(result)} полей")
         return result
     
     def _parse_specifications(self, specs_string: str) -> Dict[str, str]:
         """
-        Парсит строку характеристик формата "Ключ: Значение / Ключ: Значение".
-        
-        Args:
-            specs_string: Строка характеристик
-            
-        Returns:
-            Словарь характеристик {ключ: значение}
+        Парсит строку характеристик.
         """
-        if not specs_string or not specs_string.strip():
+        if not specs_string:
             return {}
         
-        # Используем утилиту для парсинга
-        specs = parse_specifications(specs_string)
+        # Нормализуем: удаляем переносы строк
+        normalized = specs_string.replace('\n', ' ').replace('\r', ' ')
+        import re
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
         
-        # Нормализуем ключи для сопоставления с конфигом
-        normalized_specs = {}
-        for key, value in specs.items():
-            normalized_key = self._normalize_spec_key(key)
-            
-            # Нормализуем значение Да/Нет
-            if value.lower() in ['да', 'yes', '1', 'true', 'есть']:
-                normalized_value = 'Да'
-            elif value.lower() in ['нет', 'no', '0', 'false', 'отсутствует']:
-                normalized_value = 'Нет'
-            else:
-                normalized_value = value
-            
-            normalized_specs[normalized_key] = normalized_value
+        # Используем утилиту
+        from ..utils.validators import parse_specifications as parse_specs
+        specs = parse_specs(normalized)
         
-        return normalized_specs
+        return specs
     
     def _normalize_spec_key(self, key: str) -> str:
         """
@@ -143,61 +125,101 @@ class SpecsHandler(BaseHandler):
     def _process_standard_fields(self, specs: Dict[str, str]) -> Dict[str, Any]:
         """
         Обрабатывает стандартные поля: вес, высота, ширина, глубина.
-        
-        Args:
-            specs: Словарь характеристик
-            
-        Returns:
-            Словарь с полями weight, height, width, length
         """
         result = {}
         
         # Получаем маппинг стандартных полей из конфига
         standard_mapping = self.config_manager.attribute_mapping.get("standard_fields", {})
         
+        print(f"[DEBUG] Маппинг стандартных полей: {standard_mapping}")
+        
         for spec_key, woo_field in standard_mapping.items():
             if spec_key in specs:
                 value_str = specs[spec_key]
+                print(f"[DEBUG] Обрабатываем '{spec_key}' -> '{woo_field}': '{value_str}'")
                 
-                # Используем метод конфиг менеджера для извлечения значения и единицы
+                # Извлекаем числовое значение и единицу измерения
                 numeric_value, unit = self.config_manager.extract_unit(value_str)
                 
                 if numeric_value:
                     # Сохраняем значение
                     result[woo_field] = numeric_value
+                    print(f"[DEBUG]   Числовое значение: '{numeric_value}', единица: '{unit}'")
                     
                     # Если есть единица измерения, сохраняем ее в meta-поле
                     if unit:
                         result[f"meta:{woo_field}_unit"] = unit
         
         return result
+
     
     def _process_woocommerce_attributes(self, specs: Dict[str, str]) -> Dict[str, Any]:
         """
         Обрабатывает атрибуты WooCommerce.
-        
-        Args:
-            specs: Словарь характеристик
-            
-        Returns:
-            Словарь с атрибутами WooCommerce
         """
         result = {}
         
         # Получаем маппинг атрибутов из конфига
         attr_mapping = self.config_manager.attribute_mapping.get("woocommerce_attributes", {})
         
+        print(f"[DEBUG] Маппинг атрибутов: {attr_mapping}")
+        print(f"[DEBUG] Доступные характеристики: {list(specs.keys())[:10]}...")
+        
         for spec_key, woo_attr in attr_mapping.items():
             if spec_key in specs:
                 value = specs[spec_key]
+                print(f"[DEBUG] Найдено: '{spec_key}' → '{woo_attr}' = '{value}'")
                 
-                # Нормализуем значение (уже сделано в _parse_specifications)
-                normalized_value = value.strip()
+                # Нормализуем значение для Да/Нет
+                if spec_key in ["Наличие", "В наличии", "Есть в наличии"]:
+                    normalized_value = self.config_manager.normalize_yes_no_value(value)
+                else:
+                    normalized_value = value.strip()
                 
                 # Добавляем атрибут
                 result[woo_attr] = normalized_value
         
         return result
+    
+    def _extract_numeric_value(self, value_str: str) -> Tuple[str, str]:
+        """
+        Извлекает числовое значение и единицу измерения из строки.
+        
+        Args:
+            value_str: Строка со значением (например, "10 кг")
+            
+        Returns:
+            Кортеж (числовое значение, единица измерения)
+        """
+        if not value_str:
+            return "", ""
+        
+        # Удаляем лишние пробелы
+        value_str = value_str.strip()
+        
+        # Ищем числовую часть (целые и десятичные числа)
+        # Поддерживаем форматы: 10, 10.5, 10,5, 10 кг, 10.5см и т.д.
+        match = re.search(r'([0-9]+[.,]?[0-9]*)', value_str.replace(' ', ''))
+        
+        if not match:
+            return value_str, ""
+        
+        numeric_value = match.group(1)
+        
+        # Определяем единицу измерения
+        units = {
+            'кг': 'kg', 'г': 'g', 'гр': 'g',
+            'см': 'cm', 'мм': 'mm', 'м': 'm',
+            'л': 'l', 'мл': 'ml',
+            'шт': 'pcs', 'уп': 'pack'
+        }
+        
+        # Ищем единицу измерения в строке
+        for unit_ru, unit_en in units.items():
+            if unit_ru in value_str.lower():
+                return numeric_value, unit_en
+        
+        return numeric_value, ""
     
     def cleanup(self) -> None:
         """

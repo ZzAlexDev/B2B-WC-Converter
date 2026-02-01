@@ -4,22 +4,20 @@ CoreHandler - основной обработчик для B2B-WC Converter v2.0
 """
 import re
 from typing import Dict, Any
+import logging
+from urllib.parse import urlparse
+
+from .base_handler import BaseHandler
 
 # Используем относительные импорты
 try:
-    from .base_handler import BaseHandler
     from ..models import RawProduct
     from ..config_manager import ConfigManager
-    from ..utils.logger import get_logger
-    from ..utils.validators import generate_slug, extract_price
 except ImportError:
-    from base_handler import BaseHandler
     from models import RawProduct
     from config_manager import ConfigManager
-    from utils.logger import get_logger
-    from utils.validators import generate_slug, extract_price
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class CoreHandler(BaseHandler):
@@ -118,12 +116,12 @@ class CoreHandler(BaseHandler):
         Returns:
             Уникальный slug
         """
-        # Используем утилиту для генерации slug
-        slug = generate_slug(title)
+        # Базовая транслитерация и очистка
+        slug = self._slugify(title)
         
         # Если slug пустой, используем артикул
         if not slug:
-            slug = generate_slug(sku)
+            slug = self._slugify(sku)
         
         # Проверяем уникальность
         if slug in self.slug_cache:
@@ -134,6 +132,60 @@ class CoreHandler(BaseHandler):
             slug = f"{slug}-{self.slug_counter[slug]}"
         else:
             self.slug_cache[slug] = sku
+        
+        return slug
+    
+    def _slugify(self, text: str) -> str:
+        """
+        Преобразует текст в slug.
+        
+        Args:
+            text: Исходный текст
+            
+        Returns:
+            slug
+        """
+        if not text:
+            return ""
+        
+        # Приводим к нижнему регистру
+        text = text.lower()
+        
+        # Заменяем кириллические символы на латинские
+        cyr_to_lat = {
+            'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd',
+            'е': 'e', 'ё': 'yo', 'ж': 'zh', 'з': 'z', 'и': 'i',
+            'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n',
+            'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't',
+            'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch',
+            'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '',
+            'э': 'e', 'ю': 'yu', 'я': 'ya',
+            ' ': '-', '_': '-', '.': '-', ',': '-', ';': '-',
+            ':': '-', '!': '', '?': '', '"': '', "'": '',
+            '(': '', ')': '', '[': '', ']': '', '{': '', '}': '',
+            '/': '-', '\\': '-', '@': '-', '#': '', '$': '',
+            '%': '', '^': '', '&': '-', '*': '', '+': '-',
+            '=': '-', '<': '', '>': '', '|': '-'
+        }
+        
+        result = []
+        for char in text:
+            if char in cyr_to_lat:
+                result.append(cyr_to_lat[char])
+            elif char.isalnum() or char == '-':
+                result.append(char)
+        
+        slug = ''.join(result)
+        
+        # Убираем множественные дефисы
+        slug = re.sub(r'-+', '-', slug)
+        
+        # Убираем дефисы в начале и конце
+        slug = slug.strip('-')
+        
+        # Ограничиваем длину
+        if len(slug) > 200:
+            slug = slug[:200].rstrip('-')
         
         return slug
     
@@ -174,10 +226,13 @@ class CoreHandler(BaseHandler):
         if not price_str:
             return {"regular_price": ""}
         
-        # Используем утилиту для извлечения цены
-        price, _ = extract_price(price_str)
+        # Ищем числа в строке (с поддержкой десятичных разделителей)
+        price_match = re.search(r'(\d+[\.,]?\d*)', price_str.replace(' ', ''))
         
-        if price:
+        if price_match:
+            # Заменяем запятую на точку для десятичных чисел
+            price = price_match.group(1).replace(',', '.')
+            
             # Получаем разделитель десятичных из конфига
             decimal_sep = self.config_manager.get_setting('processing.decimal_separator', '.')
             
@@ -253,7 +308,7 @@ class CoreHandler(BaseHandler):
         else:
             value = exclusive_str
         
-        # Используем утилиту для нормализации
+        # Нормализуем значение
         normalized = self.config_manager.normalize_yes_no_value(value)
         
         return {"meta:эксклюзив": normalized}
@@ -304,54 +359,59 @@ class CoreHandler(BaseHandler):
             "post_name": processed_data.get("post_name", ""),
             "post_excerpt": processed_data.get("post_excerpt", ""),
             "brand": raw_product.Бренд or "",
-            "sku": raw_product.НС_код or ""
+            "sku": raw_product.НС_код or "",
+            # Добавляем базовые поля для SEO
+            "category": raw_product.Название_категории or ""
         }
         
-        # Генерируем основные SEO поля
-        seo_fields = [
-            "title_template",
-            "metadesc_template", 
-            "focuskw_template",
-            "canonical_template",
-            "og_title_template",
-            "og_description_template",
-            "twitter_title_template",
-            "twitter_description_template"
+        # Генерируем основные SEO поля из шаблонов
+        seo_templates = self.config_manager.seo_templates
+        
+# Обрабатываем основные шаблоны
+        template_fields = [
+            ("title_template", "meta:_yoast_wpseo_title"),
+            ("metadesc_template", "meta:_yoast_wpseo_metadesc"),
+            ("focuskw_template", "meta:_yoast_wpseo_focuskw"),
+            ("canonical_template", "meta:_yoast_wpseo_canonical"),
+            ("og_title_template", "meta:_yoast_wpseo_opengraph-title"),
+            ("og_description_template", "meta:_yoast_wpseo_opengraph-description"),
+            ("twitter_title_template", "meta:_yoast_wpseo_twitter-title"),
+            ("twitter_description_template", "meta:_yoast_wpseo_twitter-description")
         ]
         
-        for field in seo_fields:
-            template = self.config_manager.get_seo_template(field)
+        for template_name, meta_field in template_fields:
+            template = seo_templates.get(template_name, "")
             if template:
-                # Заменяем плейсхолдеры в шаблоне
-                value = template
-                for key, val in template_data.items():
+                # Заменяем все плейсхолдеры
+                rendered = template
+                for key, value in template_data.items():
                     placeholder = "{" + key + "}"
-                    value = value.replace(placeholder, str(val))
+                    if placeholder in rendered:
+                        rendered = rendered.replace(placeholder, str(value))
                 
-                # Сохраняем результат
-                result[f"meta:_yoast_wpseo_{field.replace('_template', '')}"] = value
+                result[meta_field] = rendered
         
         # Генерируем остальные мета-поля из конфига
-        meta_fields = self.config_manager.seo_templates.get("meta_fields", {})
+        meta_fields = seo_templates.get("meta_fields", {})
         for meta_field, template in meta_fields.items():
-            if isinstance(template, str) and template.startswith("{") and template.endswith("}"):
-                # Это ссылка на другой шаблон
-                template_name = template[1:-1]
-                if template_name in result:
-                    result[meta_field] = result[template_name]
-                else:
-                    # Попробуем найти в основных шаблонах
-                    for seo_field in seo_fields:
-                        if seo_field == template_name:
-                            seo_field_name = f"meta:_yoast_wpseo_{seo_field.replace('_template', '')}"
-                            if seo_field_name in result:
-                                result[meta_field] = result[seo_field_name]
-                                break
+            if isinstance(template, str):
+                # Если это ссылка на другой шаблон вида {template_name}
+                if template.startswith("{") and template.endswith("}"):
+                    template_name = template[1:-1]
+                    # Ищем уже сгенерированное поле
+                    if template_name == "title_template":
+                        result[meta_field] = result.get("meta:_yoast_wpseo_title", template)
+                    elif template_name == "metadesc_template":
+                        result[meta_field] = result.get("meta:_yoast_wpseo_metadesc", template)
+                    elif template_name == "canonical_template":
+                        result[meta_field] = result.get("meta:_yoast_wpseo_canonical", template)
+                    elif template_name == "focuskw_template":
+                        result[meta_field] = result.get("meta:_yoast_wpseo_focuskw", template)
                     else:
                         result[meta_field] = template
-            else:
-                # Статическое значение
-                result[meta_field] = template
+                else:
+                    # Статическое значение
+                    result[meta_field] = template
         
         return result
     
@@ -389,6 +449,13 @@ class CoreHandler(BaseHandler):
         for woo_field, config_key in status_fields.items():
             if config_key in default_values:
                 result[woo_field] = default_values[config_key]
+
+   
+        # Добавляем дату публикации (02.02.2026)
+        result["post_date"] = "2026-02-02 10:00:00"
+
+        
+
         
         return result
     

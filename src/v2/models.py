@@ -5,6 +5,12 @@ from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 
+# В файл models.py добавим этот метод в начале
+def _safe_str(value: Any, default: str = "") -> str:
+    """Безопасно преобразует любое значение в строку, обрезает пробелы."""
+    if value is None:
+        return default
+    return str(value).strip() if isinstance(value, str) else str(value)
 
 @dataclass
 class RawProduct:
@@ -36,47 +42,35 @@ class RawProduct:
     @classmethod
     def from_csv_row(cls, row: Dict[str, str], row_number: int) -> 'RawProduct':
         """
-        Создает RawProduct из строки CSV.
-        
-        Args:
-            row: Словарь с данными строки CSV
-            row_number: Номер строки в файле
-            
-        Returns:
-            Экземпляр RawProduct
+        Создает RawProduct из строки CSV с защитой от None.
         """
-        # Нормализуем имена колонок (заменяем пробелы и дефисы на подчеркивания)
-        normalized_row = {}
+        # Создаем словарь с безопасными значениями
+        safe_values = {}
         for key, value in row.items():
-            # Заменяем специальные символы для создания валидных имен атрибутов
-            normalized_key = (
-                key.strip()
-                .replace(" ", "_")
-                .replace("-", "_")
-                .replace(".", "")
-                .replace("(", "")
-                .replace(")", "")
-            )
-            normalized_row[normalized_key] = value.strip() if value else ""
+            # Используем оригинальные имена полей, как в CSV
+            safe_values[key] = _safe_str(value)
         
-        # Создаем экземпляр класса
-        product = cls(row_number=row_number, raw_data=row)
+        # Создаем продукт с безопасными значениями
+        product = cls(row_number=row_number, raw_data=safe_values)
         
-        # Заполняем атрибуты из нормализованной строки
-        for field_name in cls.__dataclass_fields__.keys():
-            if field_name in ['row_number', 'raw_data']:
-                continue
-                
-            csv_field_name = field_name
-            if field_name == "НС_код":
-                csv_field_name = "НС_код"  # Уже нормализовано
-            elif field_name == "Штрих_код":
-                csv_field_name = "Штрих_код"
-            elif field_name == "Название_категории":
-                csv_field_name = "Название_категории"
-                
-            if csv_field_name in normalized_row:
-                setattr(product, field_name, normalized_row[csv_field_name])
+        # Прямое присвоение основных полей с преобразованием имен
+        # Если поле отсутствует в CSV - оставляем значение по умолчанию (пустую строку)
+        product.Наименование = _safe_str(safe_values.get('Наименование'))
+        product.Артикул = _safe_str(safe_values.get('Артикул'))
+        product.НС_код = _safe_str(safe_values.get('НС-код'))  # Обратите внимание на дефис
+        product.Бренд = _safe_str(safe_values.get('Бренд'))
+        product.Название_категории = _safe_str(safe_values.get('Название категории'))
+        product.Характеристики = _safe_str(safe_values.get('Характеристики'))
+        product.Изображение = _safe_str(safe_values.get('Изображение'))
+        product.Видео = _safe_str(safe_values.get('Видео'))
+        product.Статья = _safe_str(safe_values.get('Статья'))
+        product.Чертежи = _safe_str(safe_values.get('Чертежи'))
+        product.Сертификаты = _safe_str(safe_values.get('Сертификаты'))
+        product.Промоматериалы = _safe_str(safe_values.get('Промоматериалы'))
+        product.Инструкции = _safe_str(safe_values.get('Инструкции'))
+        product.Штрих_код = _safe_str(safe_values.get('Штрих код'))  # Пробел в имени
+        product.Цена = _safe_str(safe_values.get('Цена'))
+        product.Эксклюзив = _safe_str(safe_values.get('Эксклюзив'))
         
         return product
     
@@ -180,6 +174,9 @@ class WooProduct:
         """
         result = {}
         
+        print(f"[DEBUG to_woocommerce_dict] Атрибуты ({len(self.attributes)}): {self.attributes}")
+
+        
         # Основные поля
         for field_name in self.__dataclass_fields__.keys():
             if field_name in ['attributes', 'meta_fields']:
@@ -194,15 +191,42 @@ class WooProduct:
                 
             result[csv_field_name] = value if value is not None else ""
         
-        # Добавляем атрибуты
+        # Добавляем атрибуты (в правильном формате WooCommerce)
         for attr_name, attr_value in self.attributes.items():
-            result[attr_name] = attr_value
+            print(f"[DEBUG] Обрабатываю атрибут: '{attr_name}' = '{attr_value}'")
+            
+            # attr_name может быть в формате "attribute:pa_xxx" или просто "pa_xxx"
+            if attr_name.startswith('attribute:'):
+                attr_slug = attr_name.replace('attribute:', '')
+                csv_attr_name = attr_name
+            else:
+                attr_slug = attr_name
+                csv_attr_name = f"attribute:{attr_name}"
+            
+            # 1. Основное поле с значением
+            result[csv_attr_name] = attr_value if attr_value is not None else ""
+            
+            # 2. Поле с метаданными (attribute_data:)
+            readable_name = self._get_attribute_readable_name(attr_slug)
+            
+            if readable_name:
+                meta_value = f"name:{readable_name}|value:{attr_value}|visible:1|taxonomy:1"
+                result[f"attribute_data:{attr_slug}"] = meta_value
+                print(f"[DEBUG] Добавлен attribute_data: {meta_value}")
         
         # Добавляем мета-поля
         for meta_name, meta_value in self.meta_fields.items():
-            result[meta_name] = meta_value
+            result[meta_name] = meta_value if meta_value is not None else ""
+        
+        # КРИТИЧЕСКАЯ ОТЛАДКА: ВЫВЕДИ ФИНАЛЬНЫЙ СЛОВАРЬ
+        print(f"\n[DEBUG to_woocommerce_dict ФИНАЛЬНЫЙ СЛОВАРЬ]")
+        for key, value in result.items():
+            if 'attribute' in key and 'data' not in key:  # Только основные атрибуты
+                print(f"  '{key}': '{value}'")
+        print(f"Всего полей в словаре: {len(result)}")
         
         return result
+
     
     def get_csv_header(self) -> List[str]:
         """
@@ -219,11 +243,15 @@ class WooProduct:
             if field_name in ['attributes', 'meta_fields']:
                 continue
                 
-            if field_name.startswith('tax_'):
+    # ОСОБЫЙ СЛУЧАЙ: tax_status должен оставаться tax_status
+            if field_name == 'tax_status':
+                csv_field_name = 'tax_status'
+            elif field_name.startswith('tax_'):
                 csv_field_name = 'tax:' + field_name[4:]
             else:
                 csv_field_name = field_name
-                
+
+                    
             header.append(csv_field_name)
         
         # Добавляем атрибуты (уникальные для всех продуктов)
@@ -237,6 +265,49 @@ class WooProduct:
                 header.append(meta_name)
         
         return sorted(header)  # Сортируем для консистентности
+    
+    def _get_attribute_readable_name(self, attr_slug: str) -> str:
+        """
+        Преобразует slug атрибута в читаемое имя.
+        Пример: "pa_oblast-primeneniya" -> "Область применения"
+        
+        Args:
+            attr_slug: Slug атрибута
+            
+        Returns:
+            Читаемое имя или пустая строка
+        """
+        print(f"[DEBUG _get_attribute_readable_name] Получил slug: '{attr_slug}'")
+
+        # Простая таблица преобразования (можно вынести в конфиг)
+        slug_to_name = {
+            'pa_oblast-primeneniya': 'Область применения',
+            'pa_tsvet-korpusa': 'Цвет корпуса',
+            'pa_strana-proizvodstva': 'Страна производства',
+            'pa_garantiynyy-srok': 'Гарантийный срок',
+            'pa_srok-sluzhby': 'Срок службы',
+            'pa_material': 'Материал',
+            'pa_tip-tovara': 'Тип товара',
+            'pa_moshchnost': 'Мощность',
+            'pa_napryazhenie': 'Напряжение',
+            'pa_proizvoditel': 'Производитель',
+            'pa_seriya': 'Серия'
+        }
+        
+        # Убираем префикс "pa_" для поиска
+        search_slug = attr_slug.replace('pa_', '') if attr_slug.startswith('pa_') else attr_slug
+        
+        for slug, name in slug_to_name.items():
+            if slug.replace('pa_', '') == search_slug:
+                return name
+        
+        # Если не нашли, пытаемся преобразовать из slug
+        # "oblast-primeneniya" -> "Область применения"
+        if '-' in search_slug:
+            words = search_slug.replace('-', ' ').split()
+            return ' '.join(word.capitalize() for word in words)
+        
+        return search_slug.capitalize()    
 
 
 @dataclass

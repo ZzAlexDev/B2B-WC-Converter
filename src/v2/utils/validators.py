@@ -2,9 +2,74 @@
 Утилиты для валидации данных.
 """
 import re
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any
 from urllib.parse import urlparse
 
+
+def safe_strip(value: Any, default: str = "") -> str:
+    """
+    Безопасно обрезает пробелы у значения.
+    
+    Args:
+        value: Любое значение (может быть None, строкой, числом и т.д.)
+        default: Значение по умолчанию, если value равно None или пустое
+        
+    Returns:
+        Обрезанная строка или default
+    """
+    if value is None:
+        return default
+    
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped if stripped else default
+    
+    # Для чисел и других типов преобразуем в строку
+    return str(value).strip()
+
+
+def safe_getattr(obj: Any, attr_name: str, default: str = "") -> str:
+    """
+    Безопасно получает атрибут объекта.
+    
+    Args:
+        obj: Объект (например, RawProduct)
+        attr_name: Имя атрибута (например, "Наименование")
+        default: Значение по умолчанию
+        
+    Returns:
+        Значение атрибута или default (в виде обрезанной строки)
+    """
+    try:
+        value = getattr(obj, attr_name, default)
+        return safe_strip(value, default)
+    except (AttributeError, TypeError, ValueError):
+        return default
+
+
+def safe_float(value: Any, default: float = 0.0) -> float:
+    """
+    Безопасно преобразует значение в float.
+    
+    Args:
+        value: Любое значение
+        default: Значение по умолчанию при ошибке
+        
+    Returns:
+        Число float или default
+    """
+    try:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return default
+        
+        # Заменяем запятую на точку, удаляем пробелы
+        cleaned = str(value).replace(',', '.').replace(' ', '')
+        return float(cleaned)
+    except (ValueError, TypeError):
+        return default
+
+
+# Существующие функции из вашего файла (оставляем без изменений):
 
 def is_valid_url(url: str) -> bool:
     """
@@ -176,35 +241,114 @@ def generate_slug(text: str, max_length: int = 200) -> str:
     return slug
 
 
-def parse_specifications(specs_string: str, delimiter: str = '/') -> dict:
+# def parse_specifications(specs_string: str) -> dict:
     """
-    Парсит строку характеристик.
+    Парсит строку характеристик формата "Ключ: Значение / Ключ: Значение".
+    Корректно обрабатывает запятые и точки с запятой в значениях.
     
     Args:
         specs_string: Строка характеристик
-        delimiter: Разделитель характеристик
         
     Returns:
-        Словарь характеристик
+        Словарь характеристик {ключ: значение}
+    """
+    if not specs_string:
+        return {}
+        
+    specs = {}
+
+
+    
+    # Убираем лишние пробелы в начале/конце
+    string = specs_string.strip()
+    
+    # Разбиваем по "/" - основной разделитель
+    # Но защищаем от случайных "/" в значениях
+    parts = []
+    current_part = []
+    depth = 0  # Для учета скобок/кавычек если будут
+    
+    for char in string:
+        if char == '/' and depth == 0:
+            parts.append(''.join(current_part).strip())
+            current_part = []
+        else:
+            current_part.append(char)
+            # Можно добавить учет скобок/кавычек если нужно
+            # if char in '({[': depth += 1
+            # elif char in ')}]': depth -= 1
+    
+    if current_part:
+        parts.append(''.join(current_part).strip())
+    
+    # Фильтруем пустые части
+    parts = [p for p in parts if p]
+    
+    for part in parts:
+        # Ищем первое двоеточие, после которого начинается значение
+        # Это защищает от двоеточий в значениях (например, "Размер: 10:20 см")
+        colon_pos = part.find(':')
+        
+        if colon_pos > 0:
+            key = part[:colon_pos].strip()
+            value = part[colon_pos + 1:].strip()
+            
+            # Убираем точку с запятой в конце значения, если есть
+            if value.endswith(';'):
+                value = value[:-1].strip()
+            
+            if key and value:
+                # Нормализуем ключ - убираем запятые в конце ключа
+                if key.endswith(','):
+                    key = key[:-1].strip()
+                
+                specs[key] = value
+    
+    return specs
+
+
+
+def parse_specifications(specs_string: str) -> dict:
+    """
+    Парсит строку характеристик.
+    Удаляет переносы строк внутри значений.
     """
     if not specs_string:
         return {}
     
+    # 1. Удаляем переносы строк, оставляя пробелы
+    # Это исправит "220 \n- 240 В" → "220 - 240 В"
+    normalized = specs_string.replace('\n', ' ').replace('\r', ' ')
+    
+    # 2. Убираем лишние пробелы (множественные пробелы → один)
+    import re
+    normalized = re.sub(r'\s+', ' ', normalized).strip()
+    
+    print(f"[DEBUG parse_specifications] Нормализованная строка: {normalized[:200]}...")
+    
     specs = {}
     
-    # Нормализуем разделители
-    string = specs_string.replace(';', delimiter).replace(',', delimiter)
+    # 3. Разбиваем по "/"
+    items = [item.strip() for item in normalized.split('/') if item.strip()]
     
-    # Разбиваем по разделителю
-    parts = [part.strip() for part in string.split(delimiter) if part.strip()]
-    
-    for part in parts:
-        if ':' in part:
-            key, value = part.split(':', 1)
-            key = key.strip()
-            value = value.strip()
-            
-            if key and value:
-                specs[key] = value
+    for item in items:
+        # Ищем первое двоеточие с пробелом после
+        colon_pos = item.find(': ')
+        if colon_pos > 0:
+            key = item[:colon_pos].strip()
+            value = item[colon_pos + 2:].strip()  # +2 для ": "
+        else:
+            # Пробуем просто двоеточие
+            colon_pos = item.find(':')
+            if colon_pos > 0:
+                key = item[:colon_pos].strip()
+                value = item[colon_pos + 1:].strip()
+            else:
+                continue  # Пропускаем если нет двоеточия
+        
+        # Если значение начинается с "- " (как "- 240 В"), это продолжение предыдущего
+        # Но у нас уже обработаны переносы строк, так что этого не должно быть
+        
+        specs[key] = value
     
     return specs
