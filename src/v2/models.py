@@ -168,14 +168,11 @@ class WooProduct:
     def to_woocommerce_dict(self) -> Dict[str, str]:
         """
         Преобразует продукт в словарь для экспорта в CSV WooCommerce.
-        
-        Returns:
-            Словарь, где ключи - это названия колонок CSV WooCommerce
+        Формат атрибутов: attribute:Гарантийный срок, attribute_data:Гарантийный срок
         """
         result = {}
         
-        print(f"[DEBUG to_woocommerce_dict] Атрибуты ({len(self.attributes)}): {self.attributes}")
-
+        # print(f"[DEBUG to_woocommerce_dict] Атрибуты ({len(self.attributes)}): {self.attributes}")
         
         # Основные поля
         for field_name in self.__dataclass_fields__.keys():
@@ -183,7 +180,6 @@ class WooProduct:
                 continue
                 
             value = getattr(self, field_name, "")
-            # Преобразуем названия полей для CSV (tax_product_type -> tax:product_type)
             if field_name.startswith('tax_'):
                 csv_field_name = 'tax:' + field_name[4:]
             else:
@@ -191,123 +187,139 @@ class WooProduct:
                 
             result[csv_field_name] = value if value is not None else ""
         
-        # Добавляем атрибуты (в правильном формате WooCommerce)
+        # Атрибуты: генерируем в двух форматах
         for attr_name, attr_value in self.attributes.items():
-            print(f"[DEBUG] Обрабатываю атрибут: '{attr_name}' = '{attr_value}'")
+            # Формат 1: С pa_ slug'ами (для совместимости)
+            result[attr_name] = attr_value  # attribute:pa_garantiynyy-srok
             
-            # attr_name может быть в формате "attribute:pa_xxx" или просто "pa_xxx"
+            # Получаем slug
             if attr_name.startswith('attribute:'):
                 attr_slug = attr_name.replace('attribute:', '')
-                csv_attr_name = attr_name
             else:
                 attr_slug = attr_name
-                csv_attr_name = f"attribute:{attr_name}"
             
-            # 1. Основное поле с значением
-            result[csv_attr_name] = attr_value if attr_value is not None else ""
-            
-            # 2. Поле с метаданными (attribute_data:)
+            # Получаем кириллическое название
             readable_name = self._get_attribute_readable_name(attr_slug)
             
             if readable_name:
-                meta_value = f"name:{readable_name}|value:{attr_value}|visible:1|taxonomy:1"
-                result[f"attribute_data:{attr_slug}"] = meta_value
-                print(f"[DEBUG] Добавлен attribute_data: {meta_value}")
+                # Формат 2: С кириллическими названиями
+                cyr_attr_field = f"attribute:{readable_name}"
+                cyr_data_field = f"attribute_data:{readable_name}"
+                
+                result[cyr_attr_field] = attr_value
+                result[cyr_data_field] = "0|1|1"
+                
+                print(f"[DEBUG] Создан атрибут: '{cyr_attr_field}' = '{attr_value}'")
+
         
-        # Добавляем мета-поля
+        # Мета-поля
         for meta_name, meta_value in self.meta_fields.items():
             result[meta_name] = meta_value if meta_value is not None else ""
         
-        # КРИТИЧЕСКАЯ ОТЛАДКА: ВЫВЕДИ ФИНАЛЬНЫЙ СЛОВАРЬ
-        print(f"\n[DEBUG to_woocommerce_dict ФИНАЛЬНЫЙ СЛОВАРЬ]")
-        for key, value in result.items():
-            if 'attribute' in key and 'data' not in key:  # Только основные атрибуты
-                print(f"  '{key}': '{value}'")
-        print(f"Всего полей в словаре: {len(result)}")
-        
         return result
-
     
     def get_csv_header(self) -> List[str]:
         """
         Возвращает заголовок для CSV файла.
-        Включает все поля WooCommerce + динамические атрибуты и мета-поля.
-        
-        Returns:
-            Список названий колонок
+        Сохраняет парность attribute:/attribute_data: полей.
         """
         header = []
         
-        # Основные поля
+        # 1. Основные поля (не атрибуты)
+        basic_fields = []
         for field_name in self.__dataclass_fields__.keys():
             if field_name in ['attributes', 'meta_fields']:
                 continue
                 
-    # ОСОБЫЙ СЛУЧАЙ: tax_status должен оставаться tax_status
             if field_name == 'tax_status':
                 csv_field_name = 'tax_status'
             elif field_name.startswith('tax_'):
                 csv_field_name = 'tax:' + field_name[4:]
             else:
                 csv_field_name = field_name
-
-                    
-            header.append(csv_field_name)
+                
+            basic_fields.append(csv_field_name)
         
-        # Добавляем атрибуты (уникальные для всех продуктов)
+        # Сортируем основные поля
+        basic_fields.sort()
+        header.extend(basic_fields)
+        
+        # Атрибуты в двух форматах
         for attr_name in self.attributes.keys():
+            # Формат 1: С pa_ slug'ами (оригинальный)
             if attr_name not in header:
                 header.append(attr_name)
+            
+            # Добавляем attribute_data: для pa_ формата
+            if attr_name.startswith('attribute:'):
+                attr_slug = attr_name.replace('attribute:', '')
+                data_field = f"attribute_data:{attr_slug}"
+            else:
+                data_field = f"attribute_data:{attr_name}"
+            
+            if data_field not in header:
+                header.append(data_field)
+            
+            # Формат 2: С кириллическими названиями
+            readable_name = self._get_attribute_readable_name(
+                attr_slug if 'attr_slug' in locals() else attr_name
+            )
+            
+            if readable_name:
+                cyr_attr_field = f"attribute:{readable_name}"
+                cyr_data_field = f"attribute_data:{readable_name}"
+                
+                if cyr_attr_field not in header:
+                    header.append(cyr_attr_field)
+                if cyr_data_field not in header:
+                    header.append(cyr_data_field)
+
         
-        # Добавляем мета-поля (уникальные для всех продуктов)
-        for meta_name in self.meta_fields.keys():
-            if meta_name not in header:
-                header.append(meta_name)
+        # 3. Мета-поля
+        meta_fields = list(self.meta_fields.keys())
+        meta_fields.sort()
+        header.extend(meta_fields)
         
-        return sorted(header)  # Сортируем для консистентности
+        return header  # БЕЗ sorted() в конце!
+
+
+
+  # Сортируем для консистентности
     
     def _get_attribute_readable_name(self, attr_slug: str) -> str:
         """
-        Преобразует slug атрибута в читаемое имя.
-        Пример: "pa_oblast-primeneniya" -> "Область применения"
-        
-        Args:
-            attr_slug: Slug атрибута
-            
-        Returns:
-            Читаемое имя или пустая строка
+        Преобразует slug атрибута в читаемое имя на кириллице.
         """
-        print(f"[DEBUG _get_attribute_readable_name] Получил slug: '{attr_slug}'")
-
-        # Простая таблица преобразования (можно вынести в конфиг)
-        slug_to_name = {
+        # Полное соответствие slug -> кириллическое название
+        exact_mapping = {
+            'pa_garantiynyy-srok': 'Гарантийный срок',
             'pa_oblast-primeneniya': 'Область применения',
             'pa_tsvet-korpusa': 'Цвет корпуса',
             'pa_strana-proizvodstva': 'Страна производства',
-            'pa_garantiynyy-srok': 'Гарантийный срок',
             'pa_srok-sluzhby': 'Срок службы',
+            'pa_seriya': 'Серия',
             'pa_material': 'Материал',
             'pa_tip-tovara': 'Тип товара',
             'pa_moshchnost': 'Мощность',
             'pa_napryazhenie': 'Напряжение',
-            'pa_proizvoditel': 'Производитель',
-            'pa_seriya': 'Серия'
+            'pa_proizvoditel': 'Производитель'
         }
         
-        # Убираем префикс "pa_" для поиска
-        search_slug = attr_slug.replace('pa_', '') if attr_slug.startswith('pa_') else attr_slug
+        # Ищем точное совпадение
+        if attr_slug in exact_mapping:
+            return exact_mapping[attr_slug]
         
-        for slug, name in slug_to_name.items():
-            if slug.replace('pa_', '') == search_slug:
+        # Ищем совпадение без префикса pa_
+        clean_slug = attr_slug.replace('pa_', '') if attr_slug.startswith('pa_') else attr_slug
+        
+        for slug, name in exact_mapping.items():
+            if slug.replace('pa_', '') == clean_slug:
                 return name
         
-        # Если не нашли, пытаемся преобразовать из slug
-        # "oblast-primeneniya" -> "Область применения"
-        if '-' in search_slug:
-            words = search_slug.replace('-', ' ').split()
-            return ' '.join(word.capitalize() for word in words)
-        
-        return search_slug.capitalize()    
+        # Если не нашли
+        return clean_slug.replace('-', ' ').replace('_', ' ').title()
+
+    
 
 
 @dataclass

@@ -257,50 +257,51 @@ class ConverterV2:
     def _export_to_csv(self, woo_products: List[WooProduct], output_file: Path) -> None:
         """
         Экспортирует продукты в CSV файл.
-        
-        Args:
-            woo_products: Список продуктов WooCommerce
-            output_file: Путь к выходному файлу
+        Заголовок пишем вручную с кавычками для полей с пробелами.
         """
         if not woo_products:
             logger.warning("Нет продуктов для экспорта")
             return
         
-        # Получаем заголовок из первого продукта
+        # Получаем заголовок
         header = woo_products[0].get_csv_header()
         
-        # Добавляем все возможные поля из всех продуктов
+        # Добавляем все возможные поля
         for product in woo_products[1:]:
             product_header = product.get_csv_header()
             for field in product_header:
                 if field not in header:
                     header.append(field)
         
-        # Сортируем заголовок для консистентности
-        header.sort()
-        
         logger.info(f"Экспорт {len(woo_products)} продуктов в {output_file}")
-        logger.info(f"Колонок в CSV: {len(header)}")
         
         try:
             with open(output_file, 'w', encoding='utf-8', newline='') as f:
-                writer = csv.DictWriter(
+                # 1. ПИШЕМ ЗАГОЛОВОК ВРУЧНУЮ с кавычками
+                header_parts = []
+                for field in header:
+                    # Кавычим если есть пробел, двоеточие или кириллица
+                    if any(c.isspace() for c in field) or ':' in field:
+                        header_parts.append(f'"{field}"')
+                    else:
+                        header_parts.append(field)
+                
+                f.write(';'.join(header_parts) + '\n')
+                
+                # 2. Для данных используем стандартный writer
+                writer = csv.writer(
                     f, 
-                    fieldnames=header,
                     delimiter=';',
                     quotechar='"',
                     quoting=csv.QUOTE_MINIMAL
                 )
                 
-                writer.writeheader()
-                
                 for product in woo_products:
                     row_data = product.to_woocommerce_dict()
-                    
-                    # Заполняем все колонки (даже если в продукте нет такого поля)
-                    row = {}
+                    row = []
                     for field in header:
-                        row[field] = row_data.get(field, "")
+                        value = row_data.get(field, "")
+                        row.append(str(value) if value is not None else "")
                     
                     writer.writerow(row)
             
