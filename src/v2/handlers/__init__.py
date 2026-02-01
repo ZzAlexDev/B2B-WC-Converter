@@ -7,6 +7,7 @@ from .core_handler import CoreHandler
 from .specs_handler import SpecsHandler
 from .media_handler import MediaHandler
 from .content_handler import ContentHandler
+from .tags_handler import TagsHandler
 
 
 # Экспортируем базовые классы
