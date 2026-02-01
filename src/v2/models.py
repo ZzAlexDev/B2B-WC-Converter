@@ -168,11 +168,9 @@ class WooProduct:
     def to_woocommerce_dict(self) -> Dict[str, str]:
         """
         Преобразует продукт в словарь для экспорта в CSV WooCommerce.
-        Формат атрибутов: attribute:Гарантийный срок, attribute_data:Гарантийный срок
+        СТАНДАРТНЫЙ ФОРМАТ: attribute:pa_xxx и attribute_data:pa_xxx
         """
         result = {}
-        
-        # print(f"[DEBUG to_woocommerce_dict] Атрибуты ({len(self.attributes)}): {self.attributes}")
         
         # Основные поля
         for field_name in self.__dataclass_fields__.keys():
@@ -187,30 +185,16 @@ class WooProduct:
                 
             result[csv_field_name] = value if value is not None else ""
         
-        # Атрибуты: генерируем в двух форматах
+        # Атрибуты: СТАНДАРТНЫЙ ФОРМАТ WooCommerce
         for attr_name, attr_value in self.attributes.items():
-            # Формат 1: С pa_ slug'ами (для совместимости)
-            result[attr_name] = attr_value  # attribute:pa_garantiynyy-srok
+            # attr_name уже в формате "attribute:pa_xxx"
+            result[attr_name] = attr_value
             
-            # Получаем slug
+            # Добавляем attribute_data: поле
             if attr_name.startswith('attribute:'):
                 attr_slug = attr_name.replace('attribute:', '')
-            else:
-                attr_slug = attr_name
-            
-            # Получаем кириллическое название
-            readable_name = self._get_attribute_readable_name(attr_slug)
-            
-            if readable_name:
-                # Формат 2: С кириллическими названиями
-                cyr_attr_field = f"attribute:{readable_name}"
-                cyr_data_field = f"attribute_data:{readable_name}"
-                
-                result[cyr_attr_field] = attr_value
-                result[cyr_data_field] = "0|1|1"
-                
-                print(f"[DEBUG] Создан атрибут: '{cyr_attr_field}' = '{attr_value}'")
-
+                data_field = f"attribute_data:{attr_slug}"
+                result[data_field] = "0|1|1"  # position|visible|variation
         
         # Мета-поля
         for meta_name, meta_value in self.meta_fields.items():
@@ -221,12 +205,11 @@ class WooProduct:
     def get_csv_header(self) -> List[str]:
         """
         Возвращает заголовок для CSV файла.
-        Сохраняет парность attribute:/attribute_data: полей.
+        СТАНДАРТНЫЕ ЗАГОЛОВКИ: attribute:pa_xxx, attribute_data:pa_xxx
         """
         header = []
         
-        # 1. Основные поля (не атрибуты)
-        basic_fields = []
+        # Основные поля
         for field_name in self.__dataclass_fields__.keys():
             if field_name in ['attributes', 'meta_fields']:
                 continue
@@ -238,49 +221,27 @@ class WooProduct:
             else:
                 csv_field_name = field_name
                 
-            basic_fields.append(csv_field_name)
+            header.append(csv_field_name)
         
-        # Сортируем основные поля
-        basic_fields.sort()
-        header.extend(basic_fields)
-        
-        # Атрибуты в двух форматах
+        # Атрибуты: ТОЛЬКО pa_ формат
         for attr_name in self.attributes.keys():
-            # Формат 1: С pa_ slug'ами (оригинальный)
+            # Основное поле
             if attr_name not in header:
                 header.append(attr_name)
             
-            # Добавляем attribute_data: для pa_ формата
+            # Поле с метаданными
             if attr_name.startswith('attribute:'):
                 attr_slug = attr_name.replace('attribute:', '')
                 data_field = f"attribute_data:{attr_slug}"
-            else:
-                data_field = f"attribute_data:{attr_name}"
-            
-            if data_field not in header:
-                header.append(data_field)
-            
-            # Формат 2: С кириллическими названиями
-            readable_name = self._get_attribute_readable_name(
-                attr_slug if 'attr_slug' in locals() else attr_name
-            )
-            
-            if readable_name:
-                cyr_attr_field = f"attribute:{readable_name}"
-                cyr_data_field = f"attribute_data:{readable_name}"
-                
-                if cyr_attr_field not in header:
-                    header.append(cyr_attr_field)
-                if cyr_data_field not in header:
-                    header.append(cyr_data_field)
-
+                if data_field not in header:
+                    header.append(data_field)
         
-        # 3. Мета-поля
-        meta_fields = list(self.meta_fields.keys())
-        meta_fields.sort()
-        header.extend(meta_fields)
+        # Мета-поля
+        for meta_name in self.meta_fields.keys():
+            if meta_name not in header:
+                header.append(meta_name)
         
-        return header  # БЕЗ sorted() в конце!
+        return sorted(header)  # Сортируем для консистентности
 
 
 
