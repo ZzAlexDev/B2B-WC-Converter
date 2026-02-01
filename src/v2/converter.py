@@ -42,18 +42,7 @@ class ConverterV2:
         log_file = setup_logging()
         logger.info(f"Конвертер инициализирован, логи в {log_file}")
     
-    def _load_configuration(self) -> None:
-        """Загружает конфигурацию."""
-        try:
-            self.config_manager = ConfigManager.from_directory(str(self.config_path))
-            self.aggregator = Aggregator(self.config_manager)
-            logger.info("Конфигурация загружена успешно")
-        except Exception as e:
-            logger.error(f"Ошибка загрузки конфигурации: {e}")
-            raise
-    
-    # ... остальные методы без изменений ...
-    
+        
     
     def _load_configuration(self) -> None:
         """Загружает конфигурацию."""
@@ -130,129 +119,255 @@ class ConverterV2:
             raise
     
     def _process_csv_file(self, input_file: Path, errors_file: Path, 
-                         skip_errors: bool) -> tuple[List[WooProduct], List[Dict]]:
-        """
-        Обрабатывает CSV файл.
-        
-        Args:
-            input_file: Путь к входному файлу
-            errors_file: Путь к файлу ошибок
-            skip_errors: Пропускать строки с ошибками
+                            skip_errors: bool) -> tuple[List[WooProduct], List[Dict]]:
+            """
+            Обрабатывает CSV файл.
             
-        Returns:
-            Кортеж (обработанные продукты, ошибки)
-        """
-        woo_products = []
-        errors = []
-        
-        # Открываем файл ошибок для записи
-        errors_writer = None
-        
-        try:
-            # Читаем CSV файл
-            with open(input_file, 'r', encoding='utf-8') as f:
-                # Определяем разделитель
-                sample = f.read(1024)
-                f.seek(0)
+            Args:
+                input_file: Путь к входному файлу
+                errors_file: Путь к файлу ошибок
+                skip_errors: Пропускать строки с ошибками
                 
-                delimiter = ';' if ';' in sample else ','
-                
-                reader = csv.DictReader(f, delimiter=delimiter)
-                self.stats.total_rows = sum(1 for _ in reader)
-                f.seek(0)
-                next(reader)  # Пропускаем заголовок
-                
-                logger.info(f"Файл: {input_file.name}, разделитель: '{delimiter}'")
-                logger.info(f"Всего строк: {self.stats.total_rows}")
-                
-                # Создаем writer для ошибок
-                errors_writer = csv.writer(
-                    open(errors_file, 'w', encoding='utf-8', newline=''),
-                    delimiter=delimiter
-                )
-                errors_writer.writerow(['row_number', 'error', 'raw_data'])
-                
-                # Обрабатываем строки
-                for row_num, row in enumerate(reader, start=2):  # Начинаем с 2 (заголовок - строка 1)
-                    try:
-                        # Создаем RawProduct
-                        raw_product = RawProduct.from_csv_row(row, row_num)
-                        
-                        # Валидация обязательных полей
-                        if not self._validate_raw_product(raw_product):
-                            self.stats.skipped += 1
-                            error_msg = "Отсутствуют обязательные поля"
-                            errors_writer.writerow([row_num, error_msg, str(row)])
+            Returns:
+                Кортеж (обработанные продукты, ошибки)
+            """
+            woo_products = []
+            errors = []
+            
+            # Открываем файл ошибок для записи
+            errors_writer = None
+            
+            # Создаем writer для отфильтрованных товаров (опционально)
+            filtered_writer = None
+            log_filtered = self.config_manager.get_setting('filters.log_filtered', False)
+            
+            try:
+                # Читаем CSV файл
+                with open(input_file, 'r', encoding='utf-8') as f:
+                    # Определяем разделитель
+                    sample = f.read(1024)
+                    f.seek(0)
+                    
+                    delimiter = ';' if ';' in sample else ','
+                    
+                    reader = csv.DictReader(f, delimiter=delimiter)
+                    self.stats.total_rows = sum(1 for _ in reader)
+                    f.seek(0)
+                    next(reader)  # Пропускаем заголовок
+                    
+                    logger.info(f"Файл: {input_file.name}, разделитель: '{delimiter}'")
+                    logger.info(f"Всего строк: {self.stats.total_rows}")
+                    
+                    # Создаем writer для ошибок
+                    errors_writer = csv.writer(
+                        open(errors_file, 'w', encoding='utf-8', newline=''),
+                        delimiter=delimiter
+                    )
+                    errors_writer.writerow(['row_number', 'error', 'raw_data'])
+                    
+                    # Создаем writer для отфильтрованных товаров (если нужно)
+                    if log_filtered:
+                        filtered_file = Path("data/logs/filtered.csv")
+                        filtered_file.parent.mkdir(parents=True, exist_ok=True)
+                        filtered_writer = csv.writer(
+                            open(filtered_file, 'w', encoding='utf-8', newline=''),
+                            delimiter=delimiter
+                        )
+                        filtered_writer.writerow(['row_number', 'brand', 'category', 'reason', 'raw_data'])
+                    
+                    # Обрабатываем строки
+                    for row_num, row in enumerate(reader, start=2):  # Начинаем с 2 (заголовок - строка 1)
+                        try:
+                            # Создаем RawProduct
+                            raw_product = RawProduct.from_csv_row(row, row_num)
+                            
+                            # === ФИЛЬТРАЦИЯ ПО БРЕНДУ И КАТЕГОРИИ ===
+                            should_process, filter_reason = self._should_process_product(raw_product)
+                            if not should_process:
+                                self.stats.skipped += 1
+                                logger.debug(f"Пропуск строки {row_num}: {filter_reason}")
+                                
+                                # Записываем в лог фильтрации
+                                if log_filtered and filtered_writer:
+                                    filtered_writer.writerow([
+                                        row_num,
+                                        getattr(raw_product, 'Бренд', ''),
+                                        getattr(raw_product, 'Название_категории', ''),
+                                        filter_reason,
+                                        str(row)
+                                    ])
+                                
+                                continue  # Пропускаем эту строку
+                            # === КОНЕЦ ФИЛЬТРАЦИИ ===
+                            
+                            # Валидация обязательных полей
+                            if not self._validate_raw_product(raw_product):
+                                self.stats.skipped += 1
+                                error_msg = "Отсутствуют обязательные поля"
+                                errors_writer.writerow([row_num, error_msg, str(row)])
+                                errors.append({
+                                    'row': row_num,
+                                    'error': error_msg,
+                                    'data': row
+                                })
+                                continue
+                            
+                            # Обрабатываем через агрегатор
+                            woo_product = self.aggregator.process_product(raw_product)
+                            woo_products.append(woo_product)
+                            self.stats.processed += 1
+                            
+                            # Логируем прогресс
+                            if self.stats.processed % 100 == 0:
+                                logger.info(f"Обработано: {self.stats.processed}/{self.stats.total_rows}")
+                            
+                        except Exception as e:
+                            self.stats.errors += 1
+                            error_msg = str(e)
+                            logger.error(f"Ошибка в строке {row_num}: {error_msg}")
+                            
+                            if errors_writer:
+                                errors_writer.writerow([row_num, error_msg, str(row)])
+                            
                             errors.append({
                                 'row': row_num,
                                 'error': error_msg,
                                 'data': row
                             })
-                            continue
-                        
-                        # Обрабатываем через агрегатор
-                        woo_product = self.aggregator.process_product(raw_product)
-                        woo_products.append(woo_product)
-                        self.stats.processed += 1
-                        
-                        # Логируем прогресс
-                        if self.stats.processed % 100 == 0:
-                            logger.info(f"Обработано: {self.stats.processed}/{self.stats.total_rows}")
-                        
-                    except Exception as e:
-                        self.stats.errors += 1
-                        error_msg = str(e)
-                        logger.error(f"Ошибка в строке {row_num}: {error_msg}")
-                        
-                        if errors_writer:
-                            errors_writer.writerow([row_num, error_msg, str(row)])
-                        
-                        errors.append({
-                            'row': row_num,
-                            'error': error_msg,
-                            'data': row
-                        })
-                        
-                        if not skip_errors:
-                            raise
-                        
-        except Exception as e:
-            logger.error(f"Ошибка при чтении файла: {e}")
-            raise
-        finally:
-            if errors_writer:
-                # Закрываем файл ошибок
-                pass
-        
-        return woo_products, errors
+                            
+                            if not skip_errors:
+                                raise
+                            
+            except Exception as e:
+                logger.error(f"Ошибка при чтении файла: {e}")
+                raise
+            finally:
+                if errors_writer:
+                    # Закрываем файл ошибок
+                    pass
+                if filtered_writer:
+                    # Закрываем файл фильтрации
+                    pass
+            
+            return woo_products, errors
     
     def _validate_raw_product(self, raw_product: RawProduct) -> bool:
         """
         Валидирует сырой продукт.
-        
-        Args:
-            raw_product: Сырые данные продукта
-            
-        Returns:
-            True если продукт валиден
         """
-        # Получаем обязательные поля из конфига
         required_fields = self.config_manager.get_setting(
             'validation.required_fields',
             ['Наименование', 'НС-код']
         )
         
         for field in required_fields:
-            # Преобразуем имя поля для атрибута RawProduct
             field_name = field.replace(' ', '_').replace('-', '_')
             value = getattr(raw_product, field_name, "")
             
             if not value or not str(value).strip():
                 logger.warning(f"Пропуск строки {raw_product.row_number}: "
-                              f"отсутствует обязательное поле '{field}'")
+                            f"отсутствует обязательное поле '{field}'")
                 return False
         
+        # Гарантируем, что поля для фильтрации существуют
+        if not hasattr(raw_product, 'Бренд'):
+            raw_product.Бренд = ""
+        if not hasattr(raw_product, 'Название_категории'):
+            raw_product.Название_категории = ""
+        
         return True
+    
+    
+    def _should_process_product(self, raw_product: RawProduct) -> tuple[bool, str]:
+        """
+        Проверяет, нужно ли обрабатывать продукт на основе фильтров.
+        
+        Args:
+            raw_product: Сырой продукт для проверки
+            
+        Returns:
+            Кортеж (нужно_ли_обрабатывать, причина_пропуска)
+        """
+        # Получаем настройки фильтров
+        filters_config = self.config_manager.get_setting('filters', {})
+        
+        # Если фильтрация отключена - обрабатываем все
+        if not filters_config.get('enabled', False):
+            return True, "Фильтрация отключена"
+        
+        # Извлекаем данные продукта
+        brand = getattr(raw_product, 'Бренд', '').strip()
+        category = getattr(raw_product, 'Название_категории', '').strip()
+        
+        # Получаем списки для фильтрации
+        allowed_brands = filters_config.get('brands', [])
+        allowed_categories = filters_config.get('categories', [])
+        category_mode = filters_config.get('category_mode', 'exact')  # 'exact' для точного совпадения
+        
+        # Проверяем режим работы с пустыми значениями
+        if not brand and not filters_config.get('include_empty_brand', False):
+            return False, "Пустой бренд"
+        
+        if not category and not filters_config.get('include_empty_category', False):
+            return False, "Пустая категория"
+        
+        # Если оба списка пустые - фильтрация не работает
+        if not allowed_brands and not allowed_categories:
+            return True, "Нет фильтров (списки пустые)"
+        
+        # Проверка бренда
+        brand_allowed = brand in allowed_brands if allowed_brands else True
+        brand_reason = f"бренд '{brand}' не в разрешенном списке" if not brand_allowed else ""
+        
+        # Проверка категории
+        category_allowed = True
+        category_reason = ""
+        
+        if allowed_categories:
+            if category_mode == 'exact':
+                # Точное совпадение всей строки
+                category_allowed = category in allowed_categories
+                if not category_allowed:
+                    category_reason = f"категория '{category}' не найдена в списке"
+            
+            elif category_mode == 'partial':
+                # Частичное совпадение
+                category_allowed = any(
+                    filter_cat.lower() in category.lower()
+                    for filter_cat in allowed_categories
+                )
+                if not category_allowed:
+                    category_reason = f"категория не содержит '{allowed_categories}'"
+            
+            else:  # 'any_level'
+                # Разбиваем категорию на уровни
+                category_levels = [level.strip() for level in category.split(' - ')]
+                category_allowed = any(
+                    filter_cat.strip().lower() == level.lower()
+                    for level in category_levels
+                    for filter_cat in allowed_categories
+                )
+                if not category_allowed:
+                    category_reason = f"ни один уровень категории не совпадает"
+        
+        # Объединяем причины
+        reasons = []
+        if brand_reason:
+            reasons.append(brand_reason)
+        if category_reason:
+            reasons.append(category_reason)
+        
+        # Режим AND/OR
+        mode = filters_config.get('mode', 'AND').upper()
+        
+        if mode == 'AND':
+            if brand_allowed and category_allowed:
+                return True, "Соответствует фильтрам AND"
+            return False, f"Не соответствует AND: {'; '.join(reasons)}"
+        else:  # OR режим
+            if brand_allowed or category_allowed:
+                return True, "Соответствует фильтрам OR"
+            return False, f"Не соответствует OR: {'; '.join(reasons)}"    
     
     def _export_to_csv(self, woo_products: List[WooProduct], output_file: Path) -> None:
         """

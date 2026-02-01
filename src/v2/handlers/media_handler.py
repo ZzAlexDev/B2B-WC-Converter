@@ -147,6 +147,7 @@ class MediaHandler(BaseHandler):
         result = {}
         
         # 1. Обрабатываем изображения
+
         result.update(self._process_images(raw_product))
         
         # 2. Обрабатываем видео
@@ -162,41 +163,236 @@ class MediaHandler(BaseHandler):
     def _process_images(self, raw_product: RawProduct) -> Dict[str, Any]:
         """
         Обрабатывает изображения товара.
-        
-        Args:
-            raw_product: Сырые данные продукта
-            
-        Returns:
-            Словарь с полем images
+        Генерирует URL всегда, скачивает только если файла нет локально.
         """
-        from ..utils.validators import safe_getattr
+        result = {}
         
-        images_str = safe_getattr(raw_product, "Изображение")
+        if not hasattr(raw_product, 'Изображение') or not raw_product.Изображение:
+            logger.debug(f"Нет изображений для продукта {raw_product.НС_код}")
+            return result
         
-        if not images_str:
-            return {"images": ""}
-        
-        # Используем утилиту для разбиения URL
-        image_urls = split_image_urls(images_str)
+        image_urls = [url.strip() for url in raw_product.Изображение.split(',') if url.strip()]
         
         if not image_urls:
-            return {"images": ""}
+            logger.debug(f"Пустой список изображений для продукта {raw_product.НС_код}")
+            return result
         
-        # Генерируем slug из названия товара
-        slug = self._generate_slug_from_title(raw_product.Наименование)
-        ns_code = raw_product.НС_код or "unknown"
+        final_image_urls = []
         
-        # Скачиваем изображения (если включено в настройках)
-        downloaded_files = []
-        if self.config_manager.get_setting('processing.download_images', True):
-            downloaded_files = self._download_images(image_urls, ns_code, slug)
+        logger.debug(f"Начало обработки изображений для {raw_product.НС_код}: {len(image_urls)} URL")
         
-        # Формируем строку для поля images WooCommerce
-        images_field = self._generate_images_field(
-            image_urls, downloaded_files, ns_code, slug, raw_product
+        for idx, image_url in enumerate(image_urls):
+            if not image_url:
+                continue
+            
+            try:
+                # 1. Определяем локальный путь и финальный URL
+                local_path, final_url, need_download = self._prepare_image_paths(
+                    image_url, raw_product, idx
+                )
+                
+                logger.debug(f"  Изображение {idx+1}: need_download={need_download}, local_path={local_path}, url={image_url[:50]}...")
+                
+                # 2. Скачиваем только если нужно
+                if need_download:
+                    success = self._download_single_image_with_session(image_url, local_path)
+                    if success:
+                        logger.info(f"Скачано новое изображение: {image_url} → {local_path}")
+                    else:
+                        logger.warning(f"Не удалось скачать изображение: {image_url}")
+                        continue  # Пропускаем это изображение
+                else:
+                    logger.debug(f"Изображение уже существует: {local_path}")
+                
+                # 3. Всегда добавляем финальный URL (даже если не скачивали)
+                if final_url:
+                    # Форматируем для WooCommerce: URL ! alt : текст ! title : текст
+                    clean_name = ' '.join((raw_product.Наименование or "").split()).strip()
+                    image_entry = f"{final_url} ! alt : {clean_name} ! title : {clean_name} ! desc : ! caption :"
+                    final_image_urls.append(image_entry)
+                    self.downloaded_images += 1
+                    
+            except Exception as e:
+                logger.error(f"Ошибка обработки изображения {image_url}: {e}", exc_info=True)
+                # Пропускаем проблемное изображение
+        
+        # Формируем итоговую строку для WooCommerce
+        if final_image_urls:
+            result['images'] = " | ".join(final_image_urls)
+            logger.debug(f"Для {raw_product.НС_код} сформировано {len(final_image_urls)} изображений")
+        else:
+            logger.warning(f"Не удалось обработать ни одного изображения для {raw_product.НС_код}")
+        
+        return result
+
+    
+    def _prepare_image_paths(self, image_url: str, raw_product: RawProduct, index: int) -> tuple[Path, str, bool]:
+        """
+        Подготавливает пути для изображения.
+        Сначала генерирует финальный URL, затем имя файла берётся из него.
+        Гарантирует идентичность имён в URL и локальной файловой системе.
+        
+        Args:
+            image_url: Исходный URL изображения
+            raw_product: Объект RawProduct (нужен и НС-код, и название для slug)
+            index: Индекс изображения (0-based)
+            
+        Returns:
+            Кортеж: (локальный_путь, финальный_url, нужно_ли_скачивать)
+        """
+        # 1. Генерируем финальный URL
+        final_url = self._generate_final_url(raw_product, index, image_url)
+        
+        # 2. Извлекаем имя файла из URL (гарантирует совпадение!)
+        import os
+        url_filename = os.path.basename(final_url)  # "ns-1135450-sushilka-...-1.jpg"
+        
+        # 3. Локальный путь с ТЕМ ЖЕ именем файла
+        download_dir = Path(self.config_manager.get_setting(
+            'paths.local_image_download',
+            'data/downloads/images/'
+        ))
+        download_dir.mkdir(parents=True, exist_ok=True)
+        local_path = download_dir / url_filename
+        
+        # 4. Проверяем, нужно ли скачивать
+        need_download = not local_path.exists()
+        
+        # Отладка
+        logger.debug(f"Генерация путей для {raw_product.НС_код}, изображение {index+1}")
+        logger.debug(f"  Финальный URL: {final_url}")
+        logger.debug(f"  Имя файла из URL: {url_filename}")
+        logger.debug(f"  Локальный путь: {local_path}")
+        logger.debug(f"  need_download: {need_download}")
+        
+        return local_path, final_url, need_download
+
+    def _generate_final_url(self, raw_product: RawProduct, index: int, image_url: str = "") -> str:
+        """
+        Генерирует финальный URL для изображения.
+        Централизованная генерация - используется для создания и URL, и имени файла.
+        
+        Args:
+            raw_product: Объект RawProduct
+            index: Индекс изображения
+            image_url: Исходный URL (для определения расширения)
+            
+        Returns:
+            Финальный URL
+        """
+        # 1. Нормализуем НС-код (НС → ns)
+        ns_code = raw_product.НС_код
+        if ns_code.startswith("НС-"):
+            ns_code_clean = "ns-" + ns_code[3:]  # "НС-1135450" → "ns-1135450"
+        elif ns_code.startswith("нс-"):
+            ns_code_clean = "ns-" + ns_code[3:]
+        else:
+            ns_code_clean = ns_code
+        
+        safe_ns_code = self._sanitize_filename(ns_code_clean)
+        
+        # 2. Генерируем slug из названия
+        product_name = raw_product.Наименование or ""
+        slug = self._generate_slug_from_title(product_name)
+        
+        # 3. Определяем расширение файла
+        if image_url:
+            from ..utils.file_utils import get_file_extension_from_url
+            original_ext = get_file_extension_from_url(image_url)
+            if not original_ext:
+                original_ext = 'jpg'
+        else:
+            original_ext = 'jpg'
+        
+        # 4. Получаем шаблон URL из конфига
+        final_url_template = self.config_manager.get_setting(
+            'paths.final_image_url_template',
+            'https://kvanta42.ru/wp-content/uploads/2026/02/{ns_code}-{slug}-{index}.webp'            
+        )
+
+        # 5. ПРИНУДИТЕЛЬНО заменяем {ext} на .webp если есть
+        if '{ext}' in final_url_template:
+            # Вариант A: Простая замена
+            final_url_template = final_url_template.replace('{ext}', 'webp')
+            logger.warning(f"Заменён {{ext}} на 'webp' в шаблоне")
+
+        
+        # 6. Заменяем плейсхолдеры
+        final_url = final_url_template.format(
+            ns_code=safe_ns_code,
+            slug=slug,
+            index=index + 1,
+            ext=original_ext
         )
         
-        return {"images": images_field}
+        return final_url
+    
+    def _download_single_image_with_session(self, image_url: str, local_path: Path) -> bool:
+        """
+        Скачивает одно изображение с использованием сессии.
+        
+        Args:
+            image_url: URL изображения
+            local_path: Локальный путь для сохранения
+            
+        Returns:
+            True если успешно, False если ошибка
+        """
+        try:
+            # Настройки из конфига
+            timeout = self.config_manager.get_setting('processing.image_timeout', 30)
+            retries = self.config_manager.get_setting('processing.image_retries', 2)
+            
+            # Пытаемся скачать файл
+            for attempt in range(retries):
+                try:
+                    response = self.session.get(image_url, timeout=timeout)
+                    response.raise_for_status()
+                    
+                    # Проверяем, что это действительно изображение
+                    content_type = response.headers.get('content-type', '')
+                    if not content_type.startswith('image/'):
+                        logger.warning(f"URL {image_url} возвращает не изображение: {content_type}")
+                        return False
+                    
+                    # Сохраняем файл
+                    with open(local_path, 'wb') as f:
+                        f.write(response.content)
+                    
+                    # Проверяем, что файл не пустой
+                    if local_path.stat().st_size == 0:
+                        logger.warning(f"Скачанный файл пустой: {image_url}")
+                        local_path.unlink(missing_ok=True)
+                        return False
+                    
+                    logger.debug(f"Успешно скачано: {image_url} → {local_path}")
+                    return True
+                    
+                except requests.exceptions.HTTPError as e:
+                    if e.response.status_code == 403:
+                        logger.debug(f"Попытка {attempt+1}: 403 Forbidden для {image_url}")
+                        # Пробуем с Referer
+                        self.session.headers.update({"Referer": "https://www.google.com/"})
+                    else:
+                        logger.warning(f"HTTP ошибка {e.response.status_code} для {image_url}")
+                    
+                    if attempt < retries - 1:
+                        time.sleep(2 ** attempt)  # Экспоненциальная задержка
+                    else:
+                        return False
+                        
+                except requests.exceptions.RequestException as e:
+                    logger.warning(f"Ошибка сети для {image_url}: {e}")
+                    if attempt < retries - 1:
+                        time.sleep(2 ** attempt)
+                    else:
+                        return False
+        
+        except Exception as e:
+            logger.error(f"Неожиданная ошибка при скачивании {image_url}: {e}")
+            return False
+        
+        return False
     
     def _generate_slug_from_title(self, title: str) -> str:
         """
@@ -206,53 +402,57 @@ class MediaHandler(BaseHandler):
             title: Название товара
             
         Returns:
-            slug
+            slug (латиница, нижний регистр, дефисы)
         """
+        if not title:
+            return "product"
+        
+        # Используем вашу утилиту или стандартную логику
         from ..utils.validators import generate_slug
-        return generate_slug(title)
+        
+        # Если утилита не импортируется, создаем простую версию
+        try:
+            return generate_slug(title)
+        except:
+            # Простая транслитерация и очистка
+            import re
+            
+            # Транслитерация кириллицы (можно использовать вашу функцию _transliterate_to_latin)
+            latin_text = self._transliterate_to_latin(title)
+            
+            # Заменяем всё, кроме букв, цифр и дефисов
+            slug = re.sub(r'[^a-zA-Z0-9-]+', '-', latin_text)
+            
+            # Убираем лишние дефисы
+            slug = re.sub(r'-+', '-', slug)
+            
+            # Убираем дефисы в начале и конце
+            slug = slug.strip('-')
+            
+            # Нижний регистр и ограничение длины
+            return slug.lower()[:50]
     
-    def _download_images(self, image_urls: List[str], ns_code: str, slug: str) -> List[Path]:
+    def _sanitize_filename(self, filename: str) -> str:
         """
-        Скачивает изображения в локальную папку.
+        Очищает имя файла от небезопасных символов.
         
         Args:
-            image_urls: Список URL изображений
-            ns_code: НС-код товара
-            slug: slug товара
+            filename: Исходное имя
             
         Returns:
-            Список путей к скачанным файлам
+            Безопасное имя файла
         """
-        if not image_urls:
-            return []
-        
-        downloaded_files = []
-        max_workers = self.config_manager.get_setting('processing.max_image_workers', 4)
-        
-        # 🔧 ИСПРАВЛЕНО: Добавляем задержку между запросами для имитации поведения человека
-        delay_between_requests = self.config_manager.get_setting('processing.image_delay', 1.0)
-        
-        # Используем ThreadPoolExecutor для параллельного скачивания
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = []
-            for i, url in enumerate(image_urls):
-                # 🔧 ИСПРАВЛЕНО: Добавляем задержку между запуском задач
-                if i > 0 and delay_between_requests > 0:
-                    time.sleep(delay_between_requests)
-                    
-                future = executor.submit(
-                    self._download_single_image,
-                    url, ns_code, slug, i + 1
-                )
-                futures.append(future)
-            
-            for future in as_completed(futures):
-                result = future.result()
-                if result:
-                    downloaded_files.append(result)
-        
-        return downloaded_files
-    
+        # Убираем небезопасные символы для файловой системы
+        import re
+        safe = re.sub(r'[<>:"/\\|?*]', '_', filename)
+        # Убираем лишние пробелы
+        safe = re.sub(r'\s+', '_', safe)
+        # Убираем начальные/конечные точки и пробелы
+        safe = safe.strip('. ')
+        # Ограничиваем длину
+        return safe[:100]
+
+ 
     def _download_single_image(self, url: str, ns_code: str, slug: str, index: int) -> Optional[Path]:
         """
         Скачивает одно изображение с использованием сессии и заголовков браузера.
@@ -322,63 +522,7 @@ class MediaHandler(BaseHandler):
             logger.warning(f"Неожиданная ошибка при скачивании {url}: {e}")
             return None
     
-    def _generate_images_field(self, image_urls: List[str], downloaded_files: List[Path], 
-                              ns_code: str, slug: str, raw_product: RawProduct) -> str:
-        """
-        Формирует строку для поля images WooCommerce.
-        
-        Args:
-            image_urls: Список URL изображений
-            downloaded_files: Список путей к скачанным файлам
-            ns_code: НС-код товара
-            slug: slug товара
-            raw_product: Сырые данные продукта
-            
-        Returns:
-            Строка для поля images
-        """
-        if not image_urls:
-            return ""
-        
-        images_data = []
-        template = self.config_manager.get_setting(
-            'paths.final_image_url_template',
-            'https://kvanta42.ru/wp-content/uploads/2026/02/{ns_code}-{slug}-{index}.webp'
-        )
-        
-        # Транслитерируем ns_code
-        latin_ns_code = self._transliterate_to_latin(ns_code)
-        safe_ns_code = re.sub(r'[^a-zA-Z0-9_-]', '', latin_ns_code).lower()
-        
-        # Получаем нормальное название товара для alt/title
-        product_name = raw_product.Наименование or ""
-        # Очищаем название: убираем лишние пробелы, переносы
-        clean_name = ' '.join(product_name.split()).strip()
-        
-        # Можно добавить номер изображения, но не обязательно
-        # alt_title_text = f"{clean_name} - изображение {i+1}"
-        alt_title_text = clean_name  # Просто название товара
-        
-        for i, url in enumerate(image_urls):
-            index = i + 1
-            
-            # Заменяем плейсхолдеры в шаблоне URL
-            image_url = template.format(
-                ns_code=safe_ns_code,
-                slug=slug,
-                index=index
-            )
-            
-            # Формат с нормальным названием
-            image_entry = f"{image_url} ! alt : {alt_title_text} ! title : {alt_title_text} ! desc : ! caption :"
-            images_data.append(image_entry)
-        
-        return " | ".join(images_data)
 
-        
-        # Объединяем все изображения через " | "
-        return " | ".join(images_data)
-    
 
 
     def _process_video(self, raw_product: RawProduct) -> Dict[str, Any]:

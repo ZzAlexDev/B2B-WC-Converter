@@ -290,7 +290,7 @@ class ContentHandler(BaseHandler):
         # URL иконки PDF
         icon_url = self.config_manager.get_setting(
             'paths.pdf_icon_url',
-            'https://вашсайт.ru/wp-content/uploads/2026/02/pdf-icon.png'
+            'https://cdn-icons-png.freepik.com/512/299/299378.png'
         )
         
         # Название продукта
