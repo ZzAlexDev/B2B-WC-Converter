@@ -3,8 +3,9 @@ ContentHandler - обработчик текстового контента дл
 Обрабатывает: HTML описание, характеристики, документы, видео.
 """
 import re
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 import logging
+from urllib.parse import urlparse
 
 # Используем относительные импорты
 try:
@@ -39,28 +40,42 @@ class TextCleaner:
         """
         Убирает только &nbsp; и \xa0 из HTML.
         ВСЕ теги и структура остаются нетронутыми.
+        
+        Args:
+            html: HTML строка
+            
+        Returns:
+            Очищенная HTML строка
         """
         if not html:
             return ""
         
         # Простые замены - только неразрывные пробелы
+        replacements = {
+            '&nbsp;': ' ',
+            '\xa0': ' ',
+            '\u202F': ' ',  # Narrow no-break space
+            '\u2007': ' ',  # Figure space
+            '\u2060': '',   # Word joiner (нулевая ширина)
+        }
+        
         result = html
-        
-        # 1. HTML entity &nbsp;
-        result = result.replace('&nbsp;', ' ')
-        
-        # 2. Unicode non-breaking space \xa0
-        result = result.replace('\xa0', ' ')
-        
-        # 3. Другие редкие варианты
-        result = result.replace('\u202F', ' ')  # Narrow no-break space
-        result = result.replace('\u2007', ' ')  # Figure space
+        for old, new in replacements.items():
+            result = result.replace(old, new)
         
         return result
     
     @staticmethod
     def clean_text(text: str) -> str:
-        """Для обычного текста - удаляем HTML теги и неразрывные пробелы."""
+        """
+        Для обычного текста - удаляем HTML теги и неразрывные пробелы.
+        
+        Args:
+            text: Текст для очистки
+            
+        Returns:
+            Очищенный текст
+        """
         if not text:
             return ""
         
@@ -96,6 +111,14 @@ class ContentHandler(BaseHandler):
         
         # Минимальный очиститель текста
         self.text_cleaner = TextCleaner()
+        
+        # Поля с документами (тип, русское название, английское название)
+        self.doc_fields: List[Tuple[str, str, str]] = [
+            ("Чертежи", "чертеж", "drawing"),
+            ("Сертификаты", "сертификат", "certificate"),
+            ("Промоматериалы", "промо-материал", "promo-material"),
+            ("Инструкции", "инструкция", "instruction")
+        ]
     
     def process(self, raw_product: RawProduct) -> Dict[str, Any]:
         """
@@ -158,7 +181,8 @@ class ContentHandler(BaseHandler):
         
         return normalized_specs
     
-    def _build_html_content(self, raw_product: RawProduct, specs: Dict[str, str], article_html: str) -> str:
+    def _build_html_content(self, raw_product: RawProduct, 
+                           specs: Dict[str, str], article_html: str) -> str:
         """
         Собирает HTML контент из различных источников.
         
@@ -231,7 +255,9 @@ class ContentHandler(BaseHandler):
         if not specs:
             return ""
         
-        html_parts = ['<h2>Технические характеристики</h2>', '<ul>']
+        html_parts = ['<div class="specifications">',
+                      '<h2>Технические характеристики</h2>', 
+                      '<ul>']
         
         for key, value in sorted(specs.items()):
             # Очищаем значения от &nbsp; перед добавлением
@@ -239,7 +265,7 @@ class ContentHandler(BaseHandler):
             clean_value = self.text_cleaner.clean_html(value)
             html_parts.append(f'<li><strong>{clean_key}:</strong> {clean_value}</li>')
         
-        html_parts.append('</ul>')
+        html_parts.append('</ul></div>')
         
         return "\n".join(html_parts)
     
@@ -258,6 +284,7 @@ class ContentHandler(BaseHandler):
         # Документация
         docs = self._collect_documents(raw_product)
         if docs:
+            html_parts.append('<div class="documentation">')
             html_parts.append('<h3>Документация</h3>')
             
             # Группируем документы по типам
@@ -274,25 +301,30 @@ class ContentHandler(BaseHandler):
                 
                 for doc_url in urls:
                     doc_html = self._build_doc_link_html(doc_type, doc_url, raw_product)
+                    # Каждая ссылка в отдельном параграфе
                     html_parts.append(f'<p>{doc_html}</p>')
+            
+            html_parts.append('</div>')
         
         # Видео
         video_url = raw_product.Видео.strip() if raw_product.Видео else ""
         if video_url:
             video_html = self._build_video_html(video_url, raw_product)
             if video_html:
+                html_parts.append('<div class="video">')
                 if docs:
                     html_parts.append('<h3>Видеообзор</h3>')
                 else:
                     html_parts.append('<h3>Документация и видео</h3>')
                 html_parts.append(f'<p>{video_html}</p>')
+                html_parts.append('</div>')
         
         if not html_parts:
             return ""
         
         return "\n".join(html_parts)
     
-    def _collect_documents(self, raw_product: RawProduct) -> List[tuple]:
+    def _collect_documents(self, raw_product: RawProduct) -> List[Tuple[str, str]]:
         """
         Собирает все документы товара.
         
@@ -304,37 +336,81 @@ class ContentHandler(BaseHandler):
         """
         documents = []
         
-        # Поля с документами
-        doc_fields = [
-            ("Чертежи", "чертеж"),
-            ("Сертификаты", "сертификат"),
-            ("Промоматериалы", "промо-материал"),
-            ("Инструкции", "инструкция")
-        ]
+        for field_name, doc_type_ru, _ in self.doc_fields:
+            doc_urls = getattr(raw_product, field_name, "").strip()
+            
+            if not doc_urls:
+                continue
+                
+            # Разделяем URL по разным разделителям
+            # Регулярное выражение для разделения: запятые, точки с запятой, пробелы
+            urls_list = re.split(r'[,\s;]+', doc_urls)
+            
+            # Очищаем и фильтруем URL
+            for url in urls_list:
+                url = url.strip()
+                if url and self._is_valid_url(url):
+                    documents.append((doc_type_ru, url))
         
-        for field_name, doc_type in doc_fields:
-            doc_url = getattr(raw_product, field_name, "").strip()
-            if doc_url:
-                documents.append((doc_type, doc_url))
+        # Убираем дубликаты, сохраняя порядок
+        unique_docs = []
+        seen = set()
+        for doc_type, url in documents:
+            key = (doc_type, url)
+            if key not in seen:
+                seen.add(key)
+                unique_docs.append((doc_type, url))
         
-        return documents
+        return unique_docs
     
-    def _build_doc_link_html(self, doc_type: str, doc_url: str, raw_product: RawProduct) -> str:
+    def _is_valid_url(self, url: str) -> bool:
+        """
+        Проверяет, является ли строка валидным URL.
+        
+        Args:
+            url: Строка для проверки
+            
+        Returns:
+            True если валидный URL, иначе False
+        """
+        if not url or len(url) < 8:  # Минимальная длина для http://
+            return False
+        
+        try:
+            result = urlparse(url)
+            return bool(result.scheme and result.netloc)
+        except:
+            return False
+    
+    def _build_doc_link_html(self, doc_type: str, doc_url: str, 
+                            raw_product: RawProduct) -> str:
         """
         Строит HTML ссылку на документ.
         
         Args:
-            doc_type: Тип документа
+            doc_type: Тип документа (русский)
             doc_url: URL документа
             raw_product: Сырые данные продукта
             
         Returns:
             HTML ссылка
         """
+        # Получаем английское название типа документа
+        doc_type_en = ""
+        for _, ru_type, en_type in self.doc_fields:
+            if ru_type == doc_type:
+                doc_type_en = en_type
+                break
+        
         # Получаем шаблон из конфига
         template = self.config_manager.get_setting(
             'templates.doc_link_item',
-            '<img style="vertical-align: middle; margin-right: 8px;" src="{icon_url}" alt="PDF" width="32" height="32" /><a href="{doc_url}" target="_blank" rel="noopener noreferrer">{doc_type} {product_title} (PDF)</a>'
+            '<img style="vertical-align: middle; margin-right: 8px;" '
+            'src="{icon_url}" alt="{doc_type_en} icon" width="32" height="32" />'
+            '<a href="{doc_url}" target="_blank" rel="noopener noreferrer" '
+            'title="{doc_type} {product_title}">'
+            '{doc_type} {product_title} (PDF)'
+            '</a>'
         )
         
         # URL иконки PDF
@@ -345,13 +421,15 @@ class ContentHandler(BaseHandler):
         
         # Название продукта
         product_title = raw_product.Наименование or "Товар"
+        clean_title = self.text_cleaner.clean_html(product_title)
         
         # Заменяем плейсхолдеры
         html = template.format(
             icon_url=icon_url,
             doc_url=doc_url,
             doc_type=doc_type.capitalize(),
-            product_title=product_title
+            doc_type_en=doc_type_en,
+            product_title=clean_title
         )
         
         return html
@@ -373,31 +451,54 @@ class ContentHandler(BaseHandler):
         if not youtube_id:
             # Простая ссылка, если не YouTube
             product_title = raw_product.Наименование or "Товар"
-            return f'<a href="{video_url}" target="_blank" rel="noopener noreferrer">Видеообзор: {product_title}</a>'
+            clean_title = self.text_cleaner.clean_html(product_title)
+            return (f'<a href="{video_url}" target="_blank" rel="noopener noreferrer" '
+                   f'title="Видеообзор: {clean_title}">Видеообзор: {clean_title}</a>')
         
-        # Получаем шаблон из конфига
-        template = self.config_manager.get_setting(
+        # Если есть YouTube ID, создаем iframe для встраивания
+        iframe_template = self.config_manager.get_setting(
+            'templates.video_iframe',
+            '<div class="video-container" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%;">'
+            '<iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" '
+            'src="https://www.youtube.com/embed/{youtube_id}" '
+            'frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" '
+            'allowfullscreen title="Видеообзор: {product_title}"></iframe>'
+            '</div>'
+        )
+        
+        # Альтернативный вариант с превью
+        thumbnail_template = self.config_manager.get_setting(
             'templates.video_link_item',
-            '<a href="{video_url}" target="_blank" rel="noopener noreferrer"><img src="{thumbnail_url}" alt="Видеообзор: {product_title}" style="max-width: 300px;" /></a>'
+            '<a href="{video_url}" target="_blank" rel="noopener noreferrer" '
+            'title="Видеообзор: {product_title}">'
+            '<img src="{thumbnail_url}" alt="Видеообзор: {product_title}" '
+            'style="max-width: 300px; border: 1px solid #ddd; border-radius: 4px;" />'
+            '</a>'
         )
         
         # Генерируем URL превью
-        thumbnail_template = self.config_manager.get_setting(
-            'paths.video_thumbnail_template',
-            'https://img.youtube.com/vi/{youtube_id}/hqdefault.jpg'
-        )
-        
-        thumbnail_url = thumbnail_template.format(youtube_id=youtube_id)
+        thumbnail_url = f"https://img.youtube.com/vi/{youtube_id}/hqdefault.jpg"
         
         # Название продукта
         product_title = raw_product.Наименование or "Товар"
+        clean_title = self.text_cleaner.clean_html(product_title)
         
-        # Заменяем плейсхолдеры
-        html = template.format(
-            video_url=video_url,
-            thumbnail_url=thumbnail_url,
-            product_title=product_title
+        # Выбираем шаблон в зависимости от настройки
+        use_iframe = self.config_manager.get_setting(
+            'features.use_video_iframe', True
         )
+        
+        if use_iframe:
+            html = iframe_template.format(
+                youtube_id=youtube_id,
+                product_title=clean_title
+            )
+        else:
+            html = thumbnail_template.format(
+                video_url=video_url,
+                thumbnail_url=thumbnail_url,
+                product_title=clean_title
+            )
         
         return html
     
@@ -411,22 +512,22 @@ class ContentHandler(BaseHandler):
         Returns:
             HTML строка
         """
-        html_parts = ['<h3>Дополнительная информация</h3>', '<ul>']
+        items = []
         
         # Бренд
         if raw_product.Бренд:
             clean_brand = self.text_cleaner.clean_html(raw_product.Бренд)
-            html_parts.append(f'<li><strong>Бренд:</strong> {clean_brand}</li>')
+            items.append(f'<li><strong>Бренд:</strong> {clean_brand}</li>')
         
         # Артикул
         if raw_product.Артикул:
             clean_art = self.text_cleaner.clean_html(raw_product.Артикул)
-            html_parts.append(f'<li><strong>Артикул производителя:</strong> {clean_art}</li>')
+            items.append(f'<li><strong>Артикул производителя:</strong> {clean_art}</li>')
         
         # НС-код
         if raw_product.НС_код:
             clean_ns = self.text_cleaner.clean_html(raw_product.НС_код)
-            html_parts.append(f'<li><strong>НС-код:</strong> {clean_ns}</li>')
+            items.append(f'<li><strong>НС-код:</strong> {clean_ns}</li>')
         
         # Штрих-коды
         if raw_product.Штрих_код:
@@ -434,7 +535,7 @@ class ContentHandler(BaseHandler):
             if barcodes:
                 clean_barcodes = [self.text_cleaner.clean_html(b) for b in barcodes]
                 barcodes_str = ', '.join(clean_barcodes)
-                html_parts.append(f'<li><strong>Штрих-коды:</strong> {barcodes_str}</li>')
+                items.append(f'<li><strong>Штрих-коды:</strong> {barcodes_str}</li>')
         
         # Эксклюзив
         if raw_product.Эксклюзив:
@@ -448,9 +549,16 @@ class ContentHandler(BaseHandler):
             exclusive_display = normalize_yes_no(exclusive_value)
             clean_exclusive = self.text_cleaner.clean_html(exclusive_display)
             
-            html_parts.append(f'<li><strong>Эксклюзив:</strong> {clean_exclusive}</li>')
+            items.append(f'<li><strong>Эксклюзив:</strong> {clean_exclusive}</li>')
         
-        html_parts.append('</ul>')
+        if not items:
+            return ""
+        
+        html_parts = ['<div class="additional-info">',
+                      '<h3>Дополнительная информация</h3>', 
+                      '<ul>']
+        html_parts.extend(items)
+        html_parts.append('</ul></div>')
         
         return "\n".join(html_parts)
     
