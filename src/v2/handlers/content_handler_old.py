@@ -31,51 +31,6 @@ except ImportError:
 logger = get_logger(__name__)
 
 
-class TextCleaner:
-    """Минимальный очиститель только для неразрывных пробелов."""
-    
-    @staticmethod
-    def clean_html(html: str) -> str:
-        """
-        Убирает только &nbsp; и \xa0 из HTML.
-        ВСЕ теги и структура остаются нетронутыми.
-        """
-        if not html:
-            return ""
-        
-        # Простые замены - только неразрывные пробелы
-        result = html
-        
-        # 1. HTML entity &nbsp;
-        result = result.replace('&nbsp;', ' ')
-        
-        # 2. Unicode non-breaking space \xa0
-        result = result.replace('\xa0', ' ')
-        
-        # 3. Другие редкие варианты
-        result = result.replace('\u202F', ' ')  # Narrow no-break space
-        result = result.replace('\u2007', ' ')  # Figure space
-        
-        return result
-    
-    @staticmethod
-    def clean_text(text: str) -> str:
-        """Для обычного текста - удаляем HTML теги и неразрывные пробелы."""
-        if not text:
-            return ""
-        
-        # 1. Убираем неразрывные пробелы
-        text = TextCleaner.clean_html(text)
-        
-        # 2. Удаляем HTML теги
-        text = re.sub(r'<[^>]+>', '', text)
-        
-        # 3. Убираем лишние пробелы
-        text = re.sub(r'\s+', ' ', text).strip()
-        
-        return text
-
-
 class ContentHandler(BaseHandler):
     """
     Обработчик текстового контента товара.
@@ -93,9 +48,6 @@ class ContentHandler(BaseHandler):
         
         # Кэш для разобранных характеристик
         self.specs_cache: Dict[str, Dict[str, str]] = {}
-        
-        # Минимальный очиститель текста
-        self.text_cleaner = TextCleaner()
     
     def process(self, raw_product: RawProduct) -> Dict[str, Any]:
         """
@@ -111,6 +63,7 @@ class ContentHandler(BaseHandler):
         
         result = {}
 
+        
         # 1. Парсим характеристики для использования в контенте
         specs_str = safe_getattr(raw_product, "Характеристики")
         specs = self._parse_specifications(specs_str)
@@ -119,12 +72,12 @@ class ContentHandler(BaseHandler):
         article_html = safe_getattr(raw_product, "Статья")
         html_content = self._build_html_content(raw_product, specs, article_html)
         
-        # 3. ОЧИЩАЕМ только &nbsp; и \xa0, сохраняя ВЕСЬ HTML
-        result["post_content"] = self.text_cleaner.clean_html(html_content)
+        result["post_content"] = html_content
         
         logger.debug(f"ContentHandler обработал продукт {raw_product.НС_код}: "
                     f"{len(html_content)} символов HTML")
         return result
+
     
     def _parse_specifications(self, specs_string: str) -> Dict[str, str]:
         """
@@ -176,6 +129,7 @@ class ContentHandler(BaseHandler):
         processed_article = self._process_article(article_html)
         if processed_article:
             html_parts.append(processed_article)
+
         
         # Блок 2: Технические характеристики
         specs_html = self._build_specifications_html(specs)
@@ -203,7 +157,7 @@ class ContentHandler(BaseHandler):
             article_html: HTML текст статьи
             
         Returns:
-            Очищенный HTML (только &nbsp; и \xa0)
+            Очищенный HTML
         """
         if not article_html or not article_html.strip():
             return ""
@@ -215,8 +169,7 @@ class ContentHandler(BaseHandler):
             # Если нет HTML тегов, оборачиваем в параграф
             html = f"<p>{html}</p>"
         
-        # Очищаем только неразрывные пробелы, сохраняя теги
-        return self.text_cleaner.clean_html(html)
+        return html
     
     def _build_specifications_html(self, specs: Dict[str, str]) -> str:
         """
@@ -234,10 +187,7 @@ class ContentHandler(BaseHandler):
         html_parts = ['<h2>Технические характеристики</h2>', '<ul>']
         
         for key, value in sorted(specs.items()):
-            # Очищаем значения от &nbsp; перед добавлением
-            clean_key = self.text_cleaner.clean_html(key)
-            clean_value = self.text_cleaner.clean_html(value)
-            html_parts.append(f'<li><strong>{clean_key}:</strong> {clean_value}</li>')
+            html_parts.append(f'<li><strong>{key}:</strong> {value}</li>')
         
         html_parts.append('</ul>')
         
@@ -415,25 +365,21 @@ class ContentHandler(BaseHandler):
         
         # Бренд
         if raw_product.Бренд:
-            clean_brand = self.text_cleaner.clean_html(raw_product.Бренд)
-            html_parts.append(f'<li><strong>Бренд:</strong> {clean_brand}</li>')
+            html_parts.append(f'<li><strong>Бренд:</strong> {raw_product.Бренд}</li>')
         
         # Артикул
         if raw_product.Артикул:
-            clean_art = self.text_cleaner.clean_html(raw_product.Артикул)
-            html_parts.append(f'<li><strong>Артикул производителя:</strong> {clean_art}</li>')
+            html_parts.append(f'<li><strong>Артикул производителя:</strong> {raw_product.Артикул}</li>')
         
         # НС-код
         if raw_product.НС_код:
-            clean_ns = self.text_cleaner.clean_html(raw_product.НС_код)
-            html_parts.append(f'<li><strong>НС-код:</strong> {clean_ns}</li>')
+            html_parts.append(f'<li><strong>НС-код:</strong> {raw_product.НС_код}</li>')
         
         # Штрих-коды
         if raw_product.Штрих_код:
             barcodes = [b.strip() for b in raw_product.Штрих_код.split('/') if b.strip()]
             if barcodes:
-                clean_barcodes = [self.text_cleaner.clean_html(b) for b in barcodes]
-                barcodes_str = ', '.join(clean_barcodes)
+                barcodes_str = ', '.join(barcodes)
                 html_parts.append(f'<li><strong>Штрих-коды:</strong> {barcodes_str}</li>')
         
         # Эксклюзив
@@ -446,13 +392,14 @@ class ContentHandler(BaseHandler):
             
             # Используем утилиту для нормализации
             exclusive_display = normalize_yes_no(exclusive_value)
-            clean_exclusive = self.text_cleaner.clean_html(exclusive_display)
             
-            html_parts.append(f'<li><strong>Эксклюзив:</strong> {clean_exclusive}</li>')
+            html_parts.append(f'<li><strong>Эксклюзив:</strong> {exclusive_display}</li>')
         
         html_parts.append('</ul>')
         
         return "\n".join(html_parts)
+    
+    
     
     def cleanup(self) -> None:
         """
