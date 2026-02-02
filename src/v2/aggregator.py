@@ -55,10 +55,10 @@ class Aggregator:
                     handler_results[handler_name] = result
                     # ОТЛАДКА
                     if handler_name == 'SpecsHandler':
-                        print(f"\n[DEBUG] === SpecsHandler вернул ===")
+                        # print(f"\n[DEBUG] === SpecsHandler вернул ===")
                         for key, val in result.items():
                             print(f"  '{key}': '{val}'")
-                        print(f"=== Всего {len(result)} полей ===\n")
+                        # print(f"=== Всего {len(result)} полей ===\n")
                 else:
                     logger.warning(f"  {handler_name}: вернул пустой результат")
                     
@@ -84,10 +84,10 @@ class Aggregator:
 
         
         # ОТЛАДКА
-        print(f"\n[DEBUG] === Добавленные tax-поля ===")
-        print(f"tax:product_brand: '{brand}'")
-        print(f"tax:product_tag: '{tags}'")
-        print(f"=== Конец tax-полей ===\n")
+        # print(f"\n[DEBUG] === Добавленные tax-поля ===")
+        # print(f"tax:product_brand: '{brand}'")
+        # print(f"tax:product_tag: '{tags}'")
+        # print(f"=== Конец tax-полей ===\n")
         
         # Применяем дефолтные значения
         self._apply_default_values(woo_product)
@@ -105,7 +105,7 @@ class Aggregator:
         if hasattr(raw_product, 'Бренд') and raw_product.Бренд:
             brand = raw_product.Бренд.strip()
             if brand:
-                print(f"[DEBUG] Бренд найден в поле 'Бренд': '{brand}'")
+                # print(f"[DEBUG] Бренд найден в поле 'Бренд': '{brand}'")
                 return brand
         
         brand_fields = ['brand', 'Brand', 'Производитель', 'manufacturer', 'vendor']
@@ -115,17 +115,17 @@ class Aggregator:
                 value = getattr(raw_product, field_attr)
                 if value and str(value).strip():
                     brand = str(value).strip()
-                    print(f"[DEBUG] Бренд найден в поле '{field}': '{brand}'")
+                    # print(f"[DEBUG] Бренд найден в поле '{field}': '{brand}'")
                     return brand
         
         if hasattr(raw_product, 'Наименование'):
             name = raw_product.Наименование.strip()
             first_word = name.split()[0] if name.split() else ""
             if len(first_word) <= 20 and not any(x in first_word for x in [' ', '-', ',', '(']):
-                print(f"[DEBUG] Бренд извлечен из названия: '{first_word}'")
+                # print(f"[DEBUG] Бренд извлечен из названия: '{first_word}'")
                 return first_word
         
-        print(f"[DEBUG] Бренд не найден для продукта: {raw_product.НС_код}")
+        # print(f"[DEBUG] Бренд не найден для продукта: {raw_product.НС_код}")
         return ""
     
     
@@ -136,17 +136,17 @@ class Aggregator:
         print(f"[DEBUG Aggregator] Объединяю результаты от {len(handler_results)} обработчиков")
         
         for handler_name, result in handler_results.items():
-            print(f"\n[DEBUG] Обработчик '{handler_name}' вернул {len(result)} полей:")
+            # print(f"\n[DEBUG] Обработчик '{handler_name}' вернул {len(result)} полей:")
             
             for key, value in result.items():
-                print(f"  '{key}': '{value}'")
+                # print(f"  '{key}': '{value}'")
                 
                 if key in merged and merged[key] != value:
                     logger.warning(f"Конфликт поля '{key}': было '{merged[key]}', стало '{value}' (обработчик: {handler_name})")
             
             merged.update(result)
         
-        print(f"\n[DEBUG] Итого объединено {len(merged)} полей")
+        # print(f"\n[DEBUG] Итого объединено {len(merged)} полей")
         return merged
     
     def _create_woo_product(self, data: Dict[str, Any]) -> WooProduct:

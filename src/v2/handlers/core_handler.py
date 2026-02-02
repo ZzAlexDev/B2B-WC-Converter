@@ -247,6 +247,7 @@ class CoreHandler(BaseHandler):
     def _process_categories(self, raw_product: RawProduct) -> Dict[str, Any]:
         """
         Преобразует категории из формата "Категория - Подкатегория" в "Категория > Подкатегория".
+        Убирает последовательные дубликаты подкатегорий.
         
         Args:
             raw_product: Сырые данные продукта
@@ -259,8 +260,17 @@ class CoreHandler(BaseHandler):
         if not category_str:
             return {"tax:product_cat": ""}
         
-        # Заменяем разделители " - " на " > "
-        category = category_str.replace(' - ', ' > ')
+        # Разбиваем по разделителю " - "
+        parts = [part.strip() for part in category_str.split(' - ') if part.strip()]
+        
+        # Убираем последовательные дубликаты
+        cleaned_parts = []
+        for part in parts:
+            if not cleaned_parts or part != cleaned_parts[-1]:
+                cleaned_parts.append(part)
+        
+        # Склеиваем новым разделителем
+        category = ' > '.join(cleaned_parts)
         
         return {"tax:product_cat": category}
     
@@ -443,7 +453,8 @@ class CoreHandler(BaseHandler):
             "download_limit": "download_limit",
             "download_expiry": "download_expiry",
             "menu_order": "menu_order",
-            "featured": "featured"
+            "featured": "featured",
+            "post_date": "post_date"
         }
         
         for woo_field, config_key in status_fields.items():
@@ -452,7 +463,7 @@ class CoreHandler(BaseHandler):
 
    
         # Добавляем дату публикации (02.02.2026)
-        result["post_date"] = "2026-02-02 10:00:00"
+        # result["post_date"] = "2026-02-02 21:00:00"
 
         
 

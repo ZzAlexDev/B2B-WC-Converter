@@ -41,8 +41,8 @@ class SpecsHandler(BaseHandler):
         Обрабатывает характеристики товара.
         """
         
-        print(f"[DEBUG] !!!!!! RawProduct.Характеристики (полностью):")
-        print(raw_product.Характеристики)
+        # print(f"[DEBUG] !!!!!! RawProduct.Характеристики (полностью):")
+        # print(raw_product.Характеристики)
 
 
         result = {}
@@ -51,18 +51,18 @@ class SpecsHandler(BaseHandler):
         specs = self._parse_specifications(raw_product.Характеристики)
         
         # ДОБАВЬ ОТЛАДКУ
-        print(f"[DEBUG SpecsHandler] Все характеристики ({len(specs)}):")
-        for key, value in specs.items():
-            print(f"  '{key}': '{value}'")
+        # print(f"[DEBUG SpecsHandler] Все характеристики ({len(specs)}):")
+        # for key, value in specs.items():
+        #     print(f"  '{key}': '{value}'")
         
         # 2. Обрабатываем стандартные поля (вес, габариты)
         std_fields = self._process_standard_fields(specs)
-        print(f"[DEBUG] Стандартные поля: {std_fields}")
+        # print(f"[DEBUG] Стандартные поля: {std_fields}")
         result.update(std_fields)
         
         # 3. Обрабатываем атрибуты WooCommerce
         wc_attrs = self._process_woocommerce_attributes(specs)
-        print(f"[DEBUG] Атрибуты WooCommerce: {wc_attrs}")
+        # print(f"[DEBUG] Атрибуты WooCommerce: {wc_attrs}")
         result.update(wc_attrs)
         
         return result
@@ -131,12 +131,12 @@ class SpecsHandler(BaseHandler):
         # Получаем маппинг стандартных полей из конфига
         standard_mapping = self.config_manager.attribute_mapping.get("standard_fields", {})
         
-        print(f"[DEBUG] Маппинг стандартных полей: {standard_mapping}")
+        # print(f"[DEBUG] Маппинг стандартных полей: {standard_mapping}")
         
         for spec_key, woo_field in standard_mapping.items():
             if spec_key in specs:
                 value_str = specs[spec_key]
-                print(f"[DEBUG] Обрабатываем '{spec_key}' -> '{woo_field}': '{value_str}'")
+                # print(f"[DEBUG] Обрабатываем '{spec_key}' -> '{woo_field}': '{value_str}'")
                 
                 # Извлекаем числовое значение и единицу измерения
                 numeric_value, unit = self.config_manager.extract_unit(value_str)
@@ -144,7 +144,7 @@ class SpecsHandler(BaseHandler):
                 if numeric_value:
                     # Сохраняем значение
                     result[woo_field] = numeric_value
-                    print(f"[DEBUG]   Числовое значение: '{numeric_value}', единица: '{unit}'")
+                    # print(f"[DEBUG]   Числовое значение: '{numeric_value}', единица: '{unit}'")
                     
                     # Если есть единица измерения, сохраняем ее в meta-поле
                     if unit:
@@ -162,13 +162,13 @@ class SpecsHandler(BaseHandler):
         # Получаем маппинг атрибутов из конфига
         attr_mapping = self.config_manager.attribute_mapping.get("woocommerce_attributes", {})
         
-        print(f"[DEBUG] Маппинг атрибутов: {attr_mapping}")
-        print(f"[DEBUG] Доступные характеристики: {list(specs.keys())[:10]}...")
+        # print(f"[DEBUG] Маппинг атрибутов: {attr_mapping}")
+        # print(f"[DEBUG] Доступные характеристики: {list(specs.keys())[:10]}...")
         
         for spec_key, woo_attr in attr_mapping.items():
             if spec_key in specs:
                 value = specs[spec_key]
-                print(f"[DEBUG] Найдено: '{spec_key}' → '{woo_attr}' = '{value}'")
+                # print(f"[DEBUG] Найдено: '{spec_key}' → '{woo_attr}' = '{value}'")
                 
                 # Нормализуем значение для Да/Нет
                 if spec_key in ["Наличие", "В наличии", "Есть в наличии"]:

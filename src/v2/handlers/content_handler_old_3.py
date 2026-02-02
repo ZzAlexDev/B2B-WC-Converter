@@ -4,7 +4,7 @@ ContentHandler - обработчик текстового контента дл
 """
 import re
 import logging
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Callable
 from urllib.parse import urlparse
 from html import unescape
 
@@ -33,69 +33,122 @@ except ImportError:
 logger = get_logger(__name__)
 
 
-class HtmlRepair:
-    """Класс для ремонта поврежденного HTML."""
+class TextCleaner:
+    """Умный очиститель HTML с исправлением структуры."""
     
     @staticmethod
-    def repair(html: str) -> str:
+    def clean_html(html: str) -> str:
         """
-        Ремонтирует ВСЕ повреждения HTML в один проход.
+        Комплексная очистка HTML от всех ошибок исходных данных.
         
         Args:
-            html: Поврежденная HTML строка
+            html: HTML строка с ошибками
             
         Returns:
-            Исправленная валидная HTML строка
+            Очищенная валидная HTML строка
         """
         if not html:
             return ""
         
-        # 1. Декодируем HTML сущности
-        from html import unescape
+        # Шаг 1: Декодируем HTML-сущности
         html = unescape(html)
         
-        # 2. Исправляем битые закрывающие теги списков СРАЗУ
-        # ВАЖНО: Исправляем </> на </ul> (это юникодный символ END OF AREA)
-        html = html.replace('</>', '</ul>')
+        # Шаг 2: Убираем все неразрывные пробелы и спецсимволы
+        replacements = {
+            '&nbsp;': ' ',
+            '&#160;': ' ',
+            '&#xA0;': ' ',
+            '&#151;': '—',  # длинное тире
+            '&laquo;': '«',
+            '&raquo;': '»',
+            '\xa0': ' ',
+            '\u00A0': ' ',
+            '\u202F': ' ',
+            '\u2007': ' ',
+            '\u2060': '',
+            '\uFEFF': '',
+        }
         
-        # 3. Убираем ВСЕ лишние <br /> между элементами
-        # После параграфов перед заголовками
-        html = re.sub(r'</p>\s*<br\s*/?\s*>\s*<h', '</p>\n<h', html, flags=re.IGNORECASE)
+        for old, new in replacements.items():
+            html = html.replace(old, new)
         
-        # После списков перед заголовками  
-        html = re.sub(r'</ul>\s*<br\s*/?\s*>\s*<h', '</ul>\n<h', html, flags=re.IGNORECASE)
+        # Шаг 3: Исправляем незакрытые теги <li>
+        # В исходнике: <li> текст<br /> вместо <li>текст</li>
+        html = re.sub(
+            r'<li>(.*?)<br\s*/?\s*>', 
+            r'<li>\1</li>', 
+            html, 
+            flags=re.IGNORECASE | re.DOTALL
+        )
         
-        # В начале списков
-        html = re.sub(r'<ul>\s*<br\s*/?\s*>\s*', '<ul>\n', html, flags=re.IGNORECASE)
+        # Шаг 4: Убираем лишние <br /><br /> между элементами
+        # Между параграфами
+        html = re.sub(r'</p>\s*<br\s*/?>\s*<br\s*/?>\s*', r'</p>\n', html, flags=re.IGNORECASE)
+        html = re.sub(r'</p>\s*<br\s*/?>\s*', r'</p>\n', html, flags=re.IGNORECASE)
         
-        # Внутри списков
-        html = re.sub(r'</li>\s*<br\s*/?\s*>\s*<li>', '</li>\n<li>', html, flags=re.IGNORECASE)
+        # После заголовков
+        html = re.sub(r'</h[1-6]>\s*<br\s*/?>\s*<br\s*/?>\s*', r'</h[1-6]>\n', html, flags=re.IGNORECASE)
+        html = re.sub(r'</h[1-6]>\s*<br\s*/?>\s*', r'</h[1-6]>\n', html, flags=re.IGNORECASE)
         
-        # 4. Исправляем двойные кавычки в атрибутах class
-        html = re.sub(r'class=""([^""]+)""', r'class="\1"', html)
+        # После списков
+        html = re.sub(r'</(ul|ol)>\s*<br\s*/?>\s*<br\s*/?>\s*', r'</\1>\n', html, flags=re.IGNORECASE)
+        html = re.sub(r'</(ul|ol)>\s*<br\s*/?>\s*', r'</\1>\n', html, flags=re.IGNORECASE)
         
-        # 5. Убираем неразрывные пробелы
-        html = html.replace('&nbsp;', ' ')
-        html = html.replace('\xa0', ' ')
-        html = html.replace('\u00A0', ' ')
+        # Шаг 5: Убираем <br /> внутри списков
+        html = re.sub(r'</li>\s*<br\s*/?>\s*<li>', r'</li>\n<li>', html, flags=re.IGNORECASE)
         
-        # 6. Убираем множественные переносы строк
+        # Шаг 6: Добавляем закрывающие теги для незакрытых <li>
+        # Проверяем баланс тегов в списках
+        def fix_unclosed_list_items(text: str) -> str:
+            lines = text.split('\n')
+            result = []
+            in_list = False
+            
+            for line in lines:
+                # Если находим открывающий <ul> или <ol>
+                if re.search(r'<(ul|ol)[^>]*>', line):
+                    in_list = True
+                    result.append(line)
+                # Если находим закрывающий </ul> или </ol>
+                elif re.search(r'</(ul|ol)>', line):
+                    in_list = False
+                    result.append(line)
+                # Если внутри списка и строка начинается с <li> но не имеет закрывающего
+                elif in_list and re.search(r'<li[^>]*>', line) and not re.search(r'</li>', line):
+                    # Добавляем закрывающий тег в конце строки
+                    line = line.rstrip() + '</li>'
+                    result.append(line)
+                else:
+                    result.append(line)
+            
+            return '\n'.join(result)
+        
+        html = fix_unclosed_list_items(html)
+        
+        # Шаг 7: Убираем пустые параграфы
+        html = re.sub(r'<p[^>]*>\s*</p>', '', html, flags=re.IGNORECASE)
+        html = re.sub(r'<p[^>]*>\s*&nbsp;\s*</p>', '', html, flags=re.IGNORECASE)
+        html = re.sub(r'<p[^>]*>\s*<br\s*/?>\s*</p>', '', html, flags=re.IGNORECASE)
+        
+        # Шаг 8: Убираем множественные переносы строк
         html = re.sub(r'\n\s*\n\s*\n+', '\n\n', html)
         
-        # 7. Убираем лишние пробелы
+        # Шаг 9: Убираем лишние пробелы
         html = re.sub(r'\s+', ' ', html)
         html = re.sub(r'>\s+<', '><', html)
         
-        # 8. Убираем пустые строки в начале/конце
         return html.strip()
     
     @staticmethod
     def clean_text(text: str) -> str:
-        """Для обычного текста - удаляем HTML теги."""
+        """Для обычного текста - удаляем HTML теги и неразрывные пробелы."""
         if not text:
             return ""
         
-        # Убираем HTML теги
+        # Убираем неразрывные пробелы
+        text = TextCleaner.clean_html(text)
+        
+        # Удаляем HTML теги
         text = re.sub(r'<[^>]+>', '', text)
         
         # Убираем лишние пробелы
@@ -122,10 +175,10 @@ class ContentHandler(BaseHandler):
         # Кэш для разобранных характеристик
         self.specs_cache: Dict[str, Dict[str, str]] = {}
         
-        # Ремонтник HTML
-        self.html_repair = HtmlRepair
+        # Умный очиститель текста
+        self.text_cleaner = TextCleaner()
         
-        # Поля с документами
+        # Поля с документами (тип, русское название, английское название)
         self.doc_fields: List[Tuple[str, str, str]] = [
             ("Чертежи", "чертеж", "drawing"),
             ("Сертификаты", "сертификат", "certificate"),
@@ -147,51 +200,80 @@ class ContentHandler(BaseHandler):
         
         result = {}
         
-        # 1. Парсим характеристики
+        # Отладка: что приходит в статью
+        article_html = safe_getattr(raw_product, "Статья")
+        if article_html:
+            logger.debug(f"Сырая статья для {raw_product.НС_код} (первые 300 символов): {article_html[:300]}")
+        
+        # 1. Парсим характеристики для использования в контенте
         specs_str = safe_getattr(raw_product, "Характеристики")
         specs = self._parse_specifications(specs_str)
         
         # 2. Собираем HTML контент
-        article_html = safe_getattr(raw_product, "Статья")
         html_content = self._build_html_content(raw_product, specs, article_html)
         
-        # 3. ВАЖНО: НЕ чистим HTML здесь! Только сохраняем
+        # 3. Комплексная очистка HTML
         result["post_content"] = html_content
         
-        logger.debug(f"ContentHandler обработал продукт {raw_product.НС_код}")
+        # Отладка: что получилось
+        logger.debug(f"Очищенный HTML для {raw_product.НС_код} (первые 300 символов): {html_content[:300]}")
+        logger.debug(f"ContentHandler обработал продукт {raw_product.НС_код}: {len(html_content)} символов HTML")
+        
         return result
     
     def _parse_specifications(self, specs_string: str) -> Dict[str, str]:
-        """Парсит строку характеристик."""
+        """
+        Парсит строку характеристик.
+        
+        Args:
+            specs_string: Строка характеристик
+            
+        Returns:
+            Словарь характеристик {ключ: значение}
+        """
         if not specs_string or not specs_string.strip():
             return {}
         
+        # Проверяем кэш
         cache_key = hash(specs_string)
         if cache_key in self.specs_cache:
             return self.specs_cache[cache_key].copy()
         
+        # Используем утилиту для парсинга
         specs = parse_specifications(specs_string)
         
+        # Нормализуем значения Да/Нет
         normalized_specs = {}
         for key, value in specs.items():
-            clean_key = self.html_repair.clean_text(key).strip()
-            clean_value = self.html_repair.clean_text(value).strip()
+            # Очищаем ключ и значение
+            clean_key = self.text_cleaner.clean_html(key).strip()
+            clean_value = self.text_cleaner.clean_html(value).strip()
             
+            # Пропускаем пустые
             if clean_key and clean_value:
                 normalized_value = normalize_yes_no(clean_value)
                 normalized_specs[clean_key] = normalized_value
         
+        # Сохраняем в кэш
         self.specs_cache[cache_key] = normalized_specs.copy()
+        
         return normalized_specs
     
     def _build_html_content(self, raw_product: RawProduct, specs: Dict[str, str], article_html: str) -> str:
         """
         Собирает HTML контент из различных источников.
-        ВСЕ исправления HTML делаются ТОЛЬКО здесь!
+        
+        Args:
+            raw_product: Сырые данные продукта
+            specs: Словарь характеристик
+            article_html: HTML статьи
+            
+        Returns:
+            HTML строка
         """
         html_parts = []
         
-        # Блок 1: HTML из статьи (РЕМОНТИРУЕМ)
+        # Блок 1: HTML из статьи (исправляем некорректный HTML)
         processed_article = self._process_article(article_html)
         if processed_article:
             html_parts.append(processed_article)
@@ -214,25 +296,64 @@ class ContentHandler(BaseHandler):
         # Объединяем все блоки
         full_html = "\n\n".join(html_parts)
         
-        # ФИНАЛЬНЫЙ РЕМОНТ всего HTML
-        return self.html_repair.repair(full_html)
+        # Финальная очистка всего контента
+        cleaned_html = self._clean_html_content(full_html)
+        
+        return cleaned_html
+    
+    def _clean_html_content(self, html: str) -> str:
+        """
+        Финальная очистка всего HTML контента.
+        
+        Args:
+            html: HTML строка
+            
+        Returns:
+            Очищенная HTML строка
+        """
+        if not html:
+            return ""
+        
+        # Применяем комплексную очистку
+        html = self.text_cleaner.clean_html(html)
+        
+        # Убираем пустые строки в начале/конце
+        html = html.strip()
+        
+        return html
     
     def _process_article(self, article_html: str) -> str:
-        """Обрабатывает HTML статью."""
+        """
+        Обрабатывает HTML статью.
+        
+        Args:
+            article_html: HTML текст статьи
+            
+        Returns:
+            Очищенный и исправленный HTML
+        """
         if not article_html or not article_html.strip():
             return ""
         
-        # Ремонтируем HTML статьи
-        html = self.html_repair.repair(article_html)
+        # Применяем комплексную очистку
+        html = self.text_cleaner.clean_html(article_html)
         
-        # Если нет HTML тегов, оборачиваем в параграф
+        # Если совсем нет HTML тегов, оборачиваем в параграф
         if not re.search(r'<[^>]+>', html):
             html = f"<p>{html}</p>"
         
         return html
     
     def _build_specifications_html(self, specs: Dict[str, str]) -> str:
-        """Строит HTML для технических характеристик."""
+        """
+        Строит HTML для технических характеристик.
+        
+        Args:
+            specs: Словарь характеристик
+            
+        Returns:
+            HTML строка
+        """
         if not specs:
             return ""
         
@@ -241,8 +362,9 @@ class ContentHandler(BaseHandler):
                       '<ul>']
         
         for key, value in sorted(specs.items()):
-            clean_key = self.html_repair.clean_text(key)
-            clean_value = self.html_repair.clean_text(value)
+            # Очищаем значения перед добавлением
+            clean_key = self.text_cleaner.clean_html(key)
+            clean_value = self.text_cleaner.clean_html(value)
             html_parts.append(f'<li><strong>{clean_key}:</strong> {clean_value}</li>')
         
         html_parts.append('</ul></div>')
@@ -250,7 +372,15 @@ class ContentHandler(BaseHandler):
         return "\n".join(html_parts)
     
     def _build_docs_video_html(self, raw_product: RawProduct) -> str:
-        """Строит HTML для документации и видео."""
+        """
+        Строит HTML для документации и видео.
+        
+        Args:
+            raw_product: Сырые данные продукта
+            
+        Returns:
+            HTML строка
+        """
         html_parts = []
         
         # Документация
@@ -273,6 +403,7 @@ class ContentHandler(BaseHandler):
                 
                 for doc_url in urls:
                     doc_html = self._build_doc_link_html(doc_type, doc_url, raw_product)
+                    # Каждая ссылка в отдельном параграфе
                     html_parts.append(f'<p>{doc_html}</p>')
             
             html_parts.append('</div>')
@@ -296,7 +427,15 @@ class ContentHandler(BaseHandler):
         return "\n".join(html_parts)
     
     def _collect_documents(self, raw_product: RawProduct) -> List[Tuple[str, str]]:
-        """Собирает все документы товара."""
+        """
+        Собирает все документы товара.
+        
+        Args:
+            raw_product: Сырые данные продукта
+            
+        Returns:
+            Список кортежей (тип_документа, URL)
+        """
         documents = []
         
         for field_name, doc_type_ru, _ in self.doc_fields:
@@ -305,14 +444,16 @@ class ContentHandler(BaseHandler):
             if not doc_urls:
                 continue
                 
+            # Разделяем URL по разным разделителям
             urls_list = re.split(r'[,\s;]+', doc_urls)
             
+            # Очищаем и фильтруем URL
             for url in urls_list:
                 url = url.strip()
                 if url and self._is_valid_url(url):
                     documents.append((doc_type_ru, url))
         
-        # Убираем дубликаты
+        # Убираем дубликаты, сохраняя порядок
         unique_docs = []
         seen = set()
         for doc_type, url in documents:
@@ -324,7 +465,15 @@ class ContentHandler(BaseHandler):
         return unique_docs
     
     def _is_valid_url(self, url: str) -> bool:
-        """Проверяет валидность URL."""
+        """
+        Проверяет, является ли строка валидным URL.
+        
+        Args:
+            url: Строка для проверки
+            
+        Returns:
+            True если валидный URL, иначе False
+        """
         if not url or len(url) < 8:
             return False
         
@@ -334,8 +483,19 @@ class ContentHandler(BaseHandler):
         except:
             return False
     
-    def _build_doc_link_html(self, doc_type: str, doc_url: str, raw_product: RawProduct) -> str:
-        """Строит HTML ссылку на документ."""
+    def _build_doc_link_html(self, doc_type: str, doc_url: str, 
+                            raw_product: RawProduct) -> str:
+        """
+        Строит HTML ссылку на документ.
+        
+        Args:
+            doc_type: Тип документа (русский)
+            doc_url: URL документа
+            raw_product: Сырые данные продукта
+            
+        Returns:
+            HTML ссылка
+        """
         # Получаем английское название типа документа
         doc_type_en = ""
         for _, ru_type, en_type in self.doc_fields:
@@ -362,7 +522,7 @@ class ContentHandler(BaseHandler):
         
         # Название продукта
         product_title = raw_product.Наименование or "Товар"
-        clean_title = self.html_repair.clean_text(product_title)
+        clean_title = self.text_cleaner.clean_html(product_title)
         
         # Заменяем плейсхолдеры
         html = template.format(
@@ -376,17 +536,27 @@ class ContentHandler(BaseHandler):
         return html
     
     def _build_video_html(self, video_url: str, raw_product: RawProduct) -> str:
-        """Строит HTML для видео."""
+        """
+        Строит HTML для видео.
+        
+        Args:
+            video_url: URL видео
+            raw_product: Сырые данные продукта
+            
+        Returns:
+            HTML строка
+        """
         # Используем утилиту для извлечения YouTube ID
         youtube_id = extract_youtube_id(video_url)
         
         if not youtube_id:
+            # Простая ссылка, если не YouTube
             product_title = raw_product.Наименование or "Товар"
-            clean_title = self.html_repair.clean_text(product_title)
+            clean_title = self.text_cleaner.clean_html(product_title)
             return (f'<a href="{video_url}" target="_blank" rel="noopener noreferrer" '
                    f'title="Видеообзор: {clean_title}">Видеообзор: {clean_title}</a>')
         
-        # Если есть YouTube ID, создаем iframe
+        # Если есть YouTube ID, создаем iframe для встраивания
         iframe_template = self.config_manager.get_setting(
             'templates.video_iframe',
             '<div class="video-container" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%;">'
@@ -397,6 +567,7 @@ class ContentHandler(BaseHandler):
             '</div>'
         )
         
+        # Альтернативный вариант с превью
         thumbnail_template = self.config_manager.get_setting(
             'templates.video_link_item',
             '<a href="{video_url}" target="_blank" rel="noopener noreferrer" '
@@ -406,12 +577,17 @@ class ContentHandler(BaseHandler):
             '</a>'
         )
         
+        # Генерируем URL превью
         thumbnail_url = f"https://img.youtube.com/vi/{youtube_id}/hqdefault.jpg"
         
+        # Название продукта
         product_title = raw_product.Наименование or "Товар"
-        clean_title = self.html_repair.clean_text(product_title)
+        clean_title = self.text_cleaner.clean_html(product_title)
         
-        use_iframe = self.config_manager.get_setting('features.use_video_iframe', True)
+        # Выбираем шаблон в зависимости от настройки
+        use_iframe = self.config_manager.get_setting(
+            'features.use_video_iframe', True
+        )
         
         if use_iframe:
             html = iframe_template.format(
@@ -428,24 +604,32 @@ class ContentHandler(BaseHandler):
         return html
     
     def _build_additional_info_html(self, raw_product: RawProduct) -> str:
-        """Строит HTML для дополнительной информации."""
+        """
+        Строит HTML для дополнительной информации.
+        
+        Args:
+            raw_product: Сырые данные продукта
+            
+        Returns:
+            HTML строка
+        """
         items = []
         
         # Бренд
         if raw_product.Бренд:
-            clean_brand = self.html_repair.clean_text(raw_product.Бренд)
+            clean_brand = self.text_cleaner.clean_html(raw_product.Бренд)
             if clean_brand:
                 items.append(f'<li><strong>Бренд:</strong> {clean_brand}</li>')
         
         # Артикул
         if raw_product.Артикул:
-            clean_art = self.html_repair.clean_text(raw_product.Артикул)
+            clean_art = self.text_cleaner.clean_html(raw_product.Артикул)
             if clean_art:
                 items.append(f'<li><strong>Артикул производителя:</strong> {clean_art}</li>')
         
         # НС-код
         if raw_product.НС_код:
-            clean_ns = self.html_repair.clean_text(raw_product.НС_код)
+            clean_ns = self.text_cleaner.clean_html(raw_product.НС_код)
             if clean_ns:
                 items.append(f'<li><strong>НС-код:</strong> {clean_ns}</li>')
         
@@ -453,7 +637,7 @@ class ContentHandler(BaseHandler):
         if raw_product.Штрих_код:
             barcodes = [b.strip() for b in raw_product.Штрих_код.split('/') if b.strip()]
             if barcodes:
-                clean_barcodes = [self.html_repair.clean_text(b) for b in barcodes]
+                clean_barcodes = [self.text_cleaner.clean_html(b) for b in barcodes]
                 clean_barcodes = [b for b in clean_barcodes if b]
                 if clean_barcodes:
                     barcodes_str = ', '.join(clean_barcodes)
@@ -467,7 +651,7 @@ class ContentHandler(BaseHandler):
                 exclusive_value = raw_product.Эксклюзив
             
             exclusive_display = normalize_yes_no(exclusive_value)
-            clean_exclusive = self.html_repair.clean_text(exclusive_display)
+            clean_exclusive = self.text_cleaner.clean_html(exclusive_display)
             
             if clean_exclusive:
                 items.append(f'<li><strong>Эксклюзив:</strong> {clean_exclusive}</li>')
@@ -484,7 +668,9 @@ class ContentHandler(BaseHandler):
         return "\n".join(html_parts)
     
     def cleanup(self) -> None:
-        """Очищает кэш характеристик."""
+        """
+        Очищает кэш характеристик.
+        """
         self.specs_cache.clear()
         logger.debug(f"ContentHandler: очищен кэш характеристик")
         super().cleanup()

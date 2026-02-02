@@ -33,7 +33,7 @@ class BaseHandler(ABC):
         """
         self.config_manager = config_manager
         self.handler_name = self.__class__.__name__
-        logger.debug(f"Инициализирован обработчик: {self.handler_name}")
+        # logger.debug(f"Инициализирован обработчик: {self.handler_name}")
     
     @abstractmethod
     def process(self, raw_product: RawProduct) -> Dict[str, Any]:
@@ -63,7 +63,7 @@ class BaseHandler(ABC):
         """
         try:
             result = self.process(raw_product)
-            logger.debug(f"Обработчик {self.handler_name} успешно обработал продукт {raw_product.НС_код}")
+            # logger.debug(f"Обработчик {self.handler_name} успешно обработал продукт {raw_product.НС_код}")
             return result
             
         except Exception as e:
