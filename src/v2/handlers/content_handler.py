@@ -49,45 +49,36 @@ class HtmlRepair:
         """
         if not html:
             return ""
-        
-        # 1. Декодируем HTML сущности
+
+        # 1. Декодируем HTML сущности ПЕРВЫМ делом!
         from html import unescape
         html = unescape(html)
-        
-        # 2. Исправляем битые закрывающие теги списков СРАЗУ
-        # ВАЖНО: Исправляем </> на </ul> (это юникодный символ END OF AREA)
-        html = html.replace('</>', '</ul>')
-        
-        # 3. Убираем ВСЕ лишние <br /> между элементами
-        # После параграфов перед заголовками
-        html = re.sub(r'</p>\s*<br\s*/?\s*>\s*<h', '</p>\n<h', html, flags=re.IGNORECASE)
-        
-        # После списков перед заголовками  
-        html = re.sub(r'</ul>\s*<br\s*/?\s*>\s*<h', '</ul>\n<h', html, flags=re.IGNORECASE)
-        
-        # В начале списков
-        html = re.sub(r'<ul>\s*<br\s*/?\s*>\s*', '<ul>\n', html, flags=re.IGNORECASE)
-        
-        # Внутри списков
-        html = re.sub(r'</li>\s*<br\s*/?\s*>\s*<li>', '</li>\n<li>', html, flags=re.IGNORECASE)
-        
-        # 4. Исправляем двойные кавычки в атрибутах class
-        html = re.sub(r'class=""([^""]+)""', r'class="\1"', html)
-        
-        # 5. Убираем неразрывные пробелы
+
+        # 2. Теперь заменяем ВСЕ оставшиеся варианты
+        # Универсальная замена &ndash с любыми пробелами
+        html = re.sub(r'&(\s*|\u202F|\u2007|\u2060)?ndash(\s*|\u202F|\u2007|\u2060)?;?', '-', html, flags=re.IGNORECASE)
+
+        # Универсальная замена &bull
+        html = re.sub(r'&(\s*|\u202F|\u2007|\u2060)?bull(\s*|\u202F|\u2007|\u2060)?;?', '•', html, flags=re.IGNORECASE)
+
+        # Универсальная замена &deg
+        html = re.sub(r'&(\s*|\u202F|\u2007|\u2060)?deg(\s*|\u202F|\u2007|\u2060)?;?', '°', html, flags=re.IGNORECASE)
+
+        # 3. Остальные замены (только один раз!)
         html = html.replace('&nbsp;', ' ')
+        html = html.replace('&ndash;', '-')
         html = html.replace('\xa0', ' ')
-        html = html.replace('\u00A0', ' ')
-        
-        # 6. Убираем множественные переносы строк
-        html = re.sub(r'\n\s*\n\s*\n+', '\n\n', html)
-        
-        # 7. Убираем лишние пробелы
+
+        # 4. Исправляем битые теги и <br> (как у вас)
+        html = html.replace('</\x01>', '</ul>')
+        html = re.sub(r'</p>\s*<br\s*/?\s*>\s*<h', '</p>\n<h', html, flags=re.IGNORECASE)
+        # ... остальные исправления тегов
+
+        # 5. Финальная чистка
         html = re.sub(r'\s+', ' ', html)
         html = re.sub(r'>\s+<', '><', html)
-        
-        # 8. Убираем пустые строки в начале/конце
         return html.strip()
+
     
     @staticmethod
     def clean_text(text: str) -> str:
@@ -100,6 +91,10 @@ class HtmlRepair:
         
         # Убираем лишние пробелы
         text = re.sub(r'\s+', ' ', text).strip()
+        
+
+
+        
         
         return text
 
@@ -176,6 +171,11 @@ class ContentHandler(BaseHandler):
         for key, value in specs.items():
             clean_key = self.html_repair.clean_text(key).strip()
             clean_value = self.html_repair.clean_text(value).strip()
+
+            # 2. ЗАМЕНЯЕМ | на / в КЛЮЧЕ и ЗНАЧЕНИИ
+            clean_key = clean_key.replace('|', '/')
+            clean_value = clean_value.replace('|', '/')
+
             
             if clean_key and clean_value:
                 normalized_value = normalize_yes_no(clean_value)
@@ -213,6 +213,16 @@ class ContentHandler(BaseHandler):
         
         # Объединяем все блоки
         full_html = "\n\n".join(html_parts)
+
+        #     # ОТЛАДКА
+        # print("="*80)
+        # print(f"!!!DEBUG _build_html_content ДО repair: содержит '&ndash'? {'&ndash' in full_html}")
+        
+        # result = self.html_repair.repair(full_html)
+        
+        # print(f"!!!DEBUG _build_html_content ПОСЛЕ repair: содержит '&ndash'? {'&ndash' in result}")
+        # print(f"!!!Первые 300 символов результата: {repr(result[:300])}")
+        # print("="*80)
         
         # ФИНАЛЬНЫЙ РЕМОНТ всего HTML
         return self.html_repair.repair(full_html)
@@ -241,9 +251,16 @@ class ContentHandler(BaseHandler):
                       '<ul>']
         
         for key, value in sorted(specs.items()):
-            clean_key = self.html_repair.clean_text(key)
-            clean_value = self.html_repair.clean_text(value)
+            clean_key = self.html_repair.repair(key)
+            clean_value = self.html_repair.repair(value)
             html_parts.append(f'<li><strong>{clean_key}:</strong> {clean_value}</li>')
+
+            # Дополнительно: убираем HTML теги, если они есть
+            clean_key = re.sub(r'<[^>]+>', '', clean_key)
+            clean_value = re.sub(r'<[^>]+>', '', clean_value)
+            
+            html_parts.append(f'<li><strong>{clean_key}:</strong> {clean_value}</li>')
+
         
         html_parts.append('</ul></div>')
         
@@ -268,12 +285,13 @@ class ContentHandler(BaseHandler):
             
             # Добавляем документы с подзаголовками
             for doc_type, urls in doc_types.items():
-                if len(urls) > 1:
-                    html_parts.append(f'<h4>{doc_type.capitalize()}</h4>')
+
+                html_parts.append(f'<h4>{doc_type.capitalize()}</h4>')  # Подзаголовок ВСЕГДА
                 
                 for doc_url in urls:
                     doc_html = self._build_doc_link_html(doc_type, doc_url, raw_product)
                     html_parts.append(f'<p>{doc_html}</p>')
+
             
             html_parts.append('</div>')
         

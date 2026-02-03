@@ -368,11 +368,13 @@ class ConverterV2:
             if brand_allowed or category_allowed:
                 return True, "Соответствует фильтрам OR"
             return False, f"Не соответствует OR: {'; '.join(reasons)}"    
+        
+
+
     
     def _export_to_csv(self, woo_products: List[WooProduct], output_file: Path) -> None:
         """
         Экспортирует продукты в CSV файл.
-        Заголовок пишем вручную с кавычками для полей с пробелами.
         """
         if not woo_products:
             logger.warning("Нет продуктов для экспорта")
@@ -390,41 +392,79 @@ class ConverterV2:
         
         logger.info(f"Экспорт {len(woo_products)} продуктов в {output_file}")
         
-        try:
-            with open(output_file, 'w', encoding='utf-8', newline='') as f:
-                # 1. ПИШЕМ ЗАГОЛОВОК ВРУЧНУЮ с кавычками
-                header_parts = []
-                for field in header:
-                    # Кавычим если есть пробел, двоеточие или кириллица
-                    if any(c.isspace() for c in field) or ':' in field:
-                        header_parts.append(f'"{field}"')
-                    else:
-                        header_parts.append(field)
-                
-                f.write(';'.join(header_parts) + '\n')
-                
-                # 2. Для данных используем стандартный writer
+        try:                
+            with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
                 writer = csv.writer(
                     f, 
                     delimiter=';',
                     quotechar='"',
-                    quoting=csv.QUOTE_MINIMAL
+                    quoting=csv.QUOTE_MINIMAL,
+                    escapechar='\\'
                 )
                 
-                for product in woo_products:
+                # 1. Пишем заголовок через writer
+                writer.writerow(header)
+                
+                # 2. Пишем данные
+                for i, product in enumerate(woo_products, 1):
                     row_data = product.to_woocommerce_dict()
+                    
+                    # ФИНАЛЬНАЯ ОЧИСТКА ВСЕХ СТРОКОВЫХ ПОЛЕЙ
+                    cleaned_data = {}
+                    for field, value in row_data.items():
+                        if isinstance(value, str):
+                            # Вариант A: Используем существующий HtmlRepair
+                            # from .html_repair import HtmlRepair
+                            # value = HtmlRepair.repair(value)
+                            
+                            # Вариант B: Или простая замена (если импорт не работает)
+                            from html import unescape
+                            value = unescape(value)
+                            value = value.replace('&ndash;', '-').replace('&ndash ', '- ')
+                            value = value.replace('&bull;', '•').replace('&bull ', '• ')
+                            value = value.replace('&deg;', '°').replace('&deg ', '° ')
+                            value = value.replace('&nbsp;', ' ')
+                            value = value.replace('\xa0', ' ')
+                            
+                        
+                        cleaned_data[field] = value
+                    
+                    row_data = cleaned_data  # Используем очищенную версию
+                    
+                    # ДИАГНОСТИКА: проверяем результат
+                    print(f"Продукт {i}/{len(woo_products)}:")
+                    for field in ['post_content', 'post_title', 'post_excerpt']:
+                        if field in row_data:
+                            val = row_data[field]
+                            if isinstance(val, str):
+                                contains_and = '&' in val
+                                contains_ndash = 'ndash' in val.lower()
+                                if contains_and or contains_ndash:
+                                    print(f"  ⚠️  {field}: содержит '&'? {contains_and}, содержит 'ndash'? {contains_ndash}")
+                                    idx = val.find('&') if '&' in val else val.lower().find('ndash')
+                                    print(f"     Контекст: ...{repr(val[max(0, idx-30):idx+50])}...")
+                    
+                    # Формируем строку для CSV
                     row = []
                     for field in header:
                         value = row_data.get(field, "")
-                        row.append(str(value) if value is not None else "")
+                        if value is None:
+                            value = ""
+                        row.append(str(value))
                     
                     writer.writerow(row)
+                    
+                    # Логируем прогресс
+                    if i % 10 == 0:
+                        logger.debug(f"Экспортировано {i}/{len(woo_products)} продуктов")
             
             logger.info(f"Экспорт завершен: {output_file}")
             
         except Exception as e:
             logger.error(f"Ошибка при экспорте в CSV: {e}")
             raise
+
+
     
     def cleanup(self) -> None:
         """Очищает ресурсы."""

@@ -20,21 +20,26 @@ class TextCleaner:
         if not text or not isinstance(text, str):
             return ""
         
-        # Только заменяем неразрывные пробелы на обычные
-        # 1. HTML entity &nbsp;
-        text = text.replace('&nbsp;', ' ')
         
-        # 2. Unicode non-breaking space \xa0
-        text = text.replace('\xa0', ' ')
+        # 1. СНАЧАЛА заменяем HTML-сущности (самое важное!)
+        # Ищем &ndash в ЛЮБОМ виде, даже с необычными пробелами
+        text = re.sub(r'&(\s*|\u202F|\u2007|\u2060)?ndash(\s*|\u202F|\u2007|\u2060)?', '-', text)
+        text = re.sub(r'&(\s*|\u202F|\u2007|\u2060)?bull(\s*|\u202F|\u2007|\u2060)?', '•', text)
+        text = re.sub(r'&(\s*|\u202F|\u2007|\u2060)?deg(\s*|\u202F|\u2007|\u2060)?', '°', text)
         
-        # 3. Другие варианты неразрывных пробелов (редкие)
+        # 2. Только ПОТОМ убираем специальные пробелы
         text = text.replace('\u202F', ' ')  # Narrow no-break space
-        text = text.replace('\u2007', ' ')  # Figure space
+        text = text.replace('\u2007', ' ')  # Figure space  
         text = text.replace('\u2060', ' ')  # Word joiner
         
-        # Убираем множественные пробелы (но не внутри тегов!)
-        # Простой способ: заменяем "  " на " ", но не в атрибутах тегов
+        # 3. Обычные неразрывные пробелы
+        text = text.replace('&nbsp;', ' ')
+        text = text.replace('\xa0', ' ')
+       
+        
+        # 4. Убираем множественные пробелы
         text = re.sub(r'(?<=>|\s)\s{2,}(?=\s|<)', ' ', text)
+
         
         return text
     
