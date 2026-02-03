@@ -1,0 +1,421 @@
+(.venv) PS ~~~path~~~\B2B-WC-Converter> python run_v2.py --input data/input/test_01.csv
+2026-02-01 15:03:08 - v2.converter - INFO - Конвертер инициализирован, логи в data\logs\converter_20260201_150308.log
+2026-02-01 15:03:08 - v2.config_manager - INFO - Загрузка конфигурации из: config\v2
+2026-02-01 15:03:08 - v2.config_manager - INFO - Загружено конфигурационных файлов: 4
+2026-02-01 15:03:08 - v2.config_manager - INFO - Валидация конфигурации прошла успешно
+2026-02-01 15:03:08 - v2.aggregator - INFO - Aggregator инициализирован с 4 обработчиками
+2026-02-01 15:03:08 - v2.converter - INFO - Конфигурация загружена успешно
+2026-02-01 15:03:08 - v2.converter - INFO - Начало конвертации: data\input\test_01.csv
+2026-02-01 15:03:08 - v2.converter - INFO - Выходной файл: data\output\converted_20260201_150308.csv
+2026-02-01 15:03:08 - v2.converter - INFO - Файл: test_01.csv, разделитель: ';'
+2026-02-01 15:03:08 - v2.converter - INFO - Всего строк: 1
+[DEBUG] !!!!!! RawProduct.Характеристики (полностью):
+HEPA (фильтр тонкой очистки): Нет / Pre Filter (фильтр предварительной очистки): Нет / Антивандальное исполнение корпуса: Да / Вариант размещения: Вертикальное / Вид управления: Сенсорное / Вид установки (крепления): Настенная / Время непрерывной работы прибора: 1 мин / Высота товара: 24 см / Высота упаковки товара: 18 см / Гарантийный документ: Гарантийный талон / Гарантийный срок: 2 года / Глубина товара: 14.2 см / Глубина упаковки товара: 27.5 см / Длина кабеля: 1 м / Защита от перегрева: Да / Индикация включения: Нет / Класс пылевлагозащищенности: IPX1 / Количество режимов нагрева: 1 / Макс. потребляемая мощность: 2.5 кВт / Макс. скорость потока: 26 м|с / Максимальный уровень шума на выходе: 80 дБ / Масса товара (нетто): 5.1 кг / Масса товара с упаковкой (брутто): 5.5 кг / Материал корпуса: Нержавеющая сталь / Набор крепежных элементов в комплекте: Да / Напряжение электропитания, В: 220 
+- 240 В / Область применения: Офисное оборудование / Потребляемая мощность в режиме 'без нагрева': 2500 Вт / Серия: EHDA / Сетевой кабель: Да (с вилкой) / Срок службы: 5 лет / Страна производства: КНР / Температура воздуха на 
+выходе: до 50 °С / Тип сушилки: Классическая / УФ-обеззараживание: Нет / Фильтры очистки воздуха: Нет / Форма корпуса: Дизайнерская / Цвет корпуса: Серый / Ширина товара: 27 см / Ширина упаковки товара: 30.5 см
+[DEBUG parse_specifications] Нормализованная строка: HEPA (фильтр тонкой очистки): Нет / Pre Filter (фильтр предварительной очистки): Нет / Антивандальное исполнение корпуса: Да / Вариант размещения: Вертикальное / Вид управления: Сенсорное / Вид устано...
+[DEBUG SpecsHandler] Все характеристики (40):
+  'HEPA (фильтр тонкой очистки)': 'Нет'
+  'Pre Filter (фильтр предварительной очистки)': 'Нет'
+  'Антивандальное исполнение корпуса': 'Да'
+  'Вариант размещения': 'Вертикальное'
+  'Вид управления': 'Сенсорное'
+  'Вид установки (крепления)': 'Настенная'
+  'Время непрерывной работы прибора': '1 мин'
+  'Высота товара': '24 см'
+  'Высота упаковки товара': '18 см'
+  'Гарантийный документ': 'Гарантийный талон'
+  'Гарантийный срок': '2 года'
+  'Глубина товара': '14.2 см'
+  'Глубина упаковки товара': '27.5 см'
+  'Длина кабеля': '1 м'
+  'Защита от перегрева': 'Да'
+  'Индикация включения': 'Нет'
+  'Класс пылевлагозащищенности': 'IPX1'
+  'Количество режимов нагрева': '1'
+  'Макс. потребляемая мощность': '2.5 кВт'
+  'Макс. скорость потока': '26 м|с'
+  'Максимальный уровень шума на выходе': '80 дБ'
+  'Масса товара (нетто)': '5.1 кг'
+  'Масса товара с упаковкой (брутто)': '5.5 кг'
+  'Материал корпуса': 'Нержавеющая сталь'
+  'Набор крепежных элементов в комплекте': 'Да'
+  'Напряжение электропитания, В': '220 - 240 В'
+  'Область применения': 'Офисное оборудование'
+  'Потребляемая мощность в режиме 'без нагрева'': '2500 Вт'
+  'Серия': 'EHDA'
+  'Сетевой кабель': 'Да (с вилкой)'
+  'Срок службы': '5 лет'
+  'Страна производства': 'КНР'
+  'Температура воздуха на выходе': 'до 50 °С'
+  'Тип сушилки': 'Классическая'
+  'УФ-обеззараживание': 'Нет'
+  'Фильтры очистки воздуха': 'Нет'
+  'Форма корпуса': 'Дизайнерская'
+  'Цвет корпуса': 'Серый'
+  'Ширина товара': '27 см'
+  'Ширина упаковки товара': '30.5 см'
+[DEBUG] Маппинг стандартных полей: {'Масса товара (нетто)': 'weight', 'Высота товара': 'height', 'Ширина товара': 'width', 'Глубина товара': 'length', 'Вес брутто': 'meta:вес_брутто', 'Объем': 'meta:объем'}
+[DEBUG] Обрабатываем 'Масса товара (нетто)' -> 'weight': '5.1 кг'
+[DEBUG]   Числовое значение: '5.1', единица: 'kg'
+[DEBUG] Обрабатываем 'Высота товара' -> 'height': '24 см'
+[DEBUG]   Числовое значение: '24', единица: 'cm'
+[DEBUG] Обрабатываем 'Ширина товара' -> 'width': '27 см'
+[DEBUG]   Числовое значение: '27', единица: 'cm'
+[DEBUG] Обрабатываем 'Глубина товара' -> 'length': '14.2 см'
+[DEBUG]   Числовое значение: '14.2', единица: 'cm'
+[DEBUG] Стандартные поля: {'weight': '5.1', 'meta:weight_unit': 'kg', 'height': '24', 'meta:height_unit': 'cm', 'width': '27', 'meta:width_unit': 'cm', 'length': '14.2', 'meta:length_unit': 'cm'}
+[DEBUG] Маппинг атрибутов: {'Область применения': 'attribute:pa_oblast-primeneniya', 'Цвет корпуса': 'attribute:pa_tsvet-korpusa', 'Страна производства': 'attribute:pa_strana-proizvodstva', 'Гарантийный срок': 'attribute:pa_garantiynyy-srok', 'Срок службы': 'attribute:pa_srok-sluzhby', 'Материал': 'attribute:pa_material', 'Тип товара': 'attribute:pa_tip-tovara', 'Мощность': 'attribute:pa_moshchnost', 'Напряжение': 'attribute:pa_napryazhenie', 'Производитель': 'attribute:pa_proizvoditel', 'Серия': 'attribute:pa_seriya'}
+[DEBUG] Доступные характеристики: ['HEPA (фильтр тонкой очистки)', 'Pre Filter (фильтр предварительной очистки)', 'Антивандальное исполнение корпуса', 'Вариант размещения', 'Вид управления', 'Вид установки (крепления)', 'Время непрерывной работы прибора', 'Высота товара', 'Высота упаковки товара', 'Гарантийный документ']...
+[DEBUG] Найдено: 'Область применения' → 'attribute:pa_oblast-primeneniya' = 'Офисное оборудование'
+[DEBUG] Найдено: 'Цвет корпуса' → 'attribute:pa_tsvet-korpusa' = 'Серый'
+[DEBUG] Найдено: 'Страна производства' → 'attribute:pa_strana-proizvodstva' = 'КНР'
+[DEBUG] Найдено: 'Гарантийный срок' → 'attribute:pa_garantiynyy-srok' = '2 года'
+[DEBUG] Найдено: 'Срок службы' → 'attribute:pa_srok-sluzhby' = '5 лет'
+[DEBUG] Найдено: 'Серия' → 'attribute:pa_seriya' = 'EHDA'
+[DEBUG] Атрибуты WooCommerce: {'attribute:pa_oblast-primeneniya': 'Офисное оборудование', 'attribute:pa_tsvet-korpusa': 'Серый', 'attribute:pa_strana-proizvodstva': 'КНР', 'attribute:pa_garantiynyy-srok': '2 года', 'attribute:pa_srok-sluzhby': '5 лет', 'attribute:pa_seriya': 'EHDA'}
+
+[DEBUG] === SpecsHandler вернул ===
+  'weight': '5.1'
+  'meta:weight_unit': 'kg'
+  'height': '24'
+  'meta:height_unit': 'cm'
+  'width': '27'
+  'meta:width_unit': 'cm'
+  'length': '14.2'
+  'meta:length_unit': 'cm'
+  'attribute:pa_oblast-primeneniya': 'Офисное оборудование'
+  'attribute:pa_tsvet-korpusa': 'Серый'
+  'attribute:pa_strana-proizvodstva': 'КНР'
+  'attribute:pa_garantiynyy-srok': '2 года'
+  'attribute:pa_srok-sluzhby': '5 лет'
+  'attribute:pa_seriya': 'EHDA'
+=== Всего 14 полей ===
+
+[DEBUG parse_specifications] Нормализованная строка: HEPA (фильтр тонкой очистки): Нет / Pre Filter (фильтр предварительной очистки): Нет / Антивандальное исполнение корпуса: Да / Вариант размещения: Вертикальное / Вид управления: Сенсорное / Вид устано...
+[DEBUG Aggregator] Объединяю результаты от 4 обработчиков
+
+[DEBUG] Обработчик 'CoreHandler' вернул 45 полей:
+  'post_title': 'Рукосушилка Electrolux EHDA – 2500'
+  'post_name': 'rukosushilka-electrolux-ehda-2500'
+  'sku': 'НС-0028148'
+  'meta:артикул': 'EHDA – 2500'
+  'regular_price': '14990'
+  'tax:product_cat': 'Тепловое оборудование > Сушилки для рук > Сушилки для рук'
+  'meta:_global_unique_id': '7312971100010'
+  'meta:эксклюзив': 'Нет'
+  'post_excerpt': 'Рукосушка Electrolux EHDA-2500&nbsp представляет собой автоматическую сушилку для рук, изготовленную по&nbsp особой антивандальной технологии, со&nbsp встрое...'
+  'meta:_yoast_wpseo_title': 'Рукосушилка Electrolux EHDA – 2500 | Electrolux | Купить в ООО «Кванта»'
+  'meta:_yoast_wpseo_metadesc': 'Рукосушка Electrolux EHDA-2500&nbsp представляет собой автоматическую сушилку для рук, изготовленную по&nbsp особой антивандальной технологии, со&nbsp встрое...'
+  'meta:_yoast_wpseo_focuskw': 'Рукосушилка Electrolux EHDA – 2500'
+  'meta:_yoast_wpseo_canonical': 'https://kvanta42.ru/product/rukosushilka-electrolux-ehda-2500/'
+  'meta:_yoast_wpseo_opengraph-title': 'Рукосушилка Electrolux EHDA – 2500'
+  'meta:_yoast_wpseo_opengraph-description': 'Рукосушка Electrolux EHDA-2500&nbsp представляет собой автоматическую сушилку для рук, изготовленную по&nbsp особой антивандальной технологии, со&nbsp встрое...'
+  'meta:_yoast_wpseo_twitter-title': 'Рукосушилка Electrolux EHDA – 2500'
+  'meta:_yoast_wpseo_twitter-description': 'Рукосушка Electrolux EHDA-2500&nbsp представляет собой автоматическую сушилку для рук, изготовленную по&nbsp особой антивандальной технологии, со&nbsp встрое...'
+  '_yoast_wpseo_title': 'Рукосушилка Electrolux EHDA – 2500 | Electrolux | Купить в ООО «Кванта»'
+  '_yoast_wpseo_metadesc': 'Рукосушка Electrolux EHDA-2500&nbsp представляет собой автоматическую сушилку для рук, изготовленную по&nbsp особой антивандальной технологии, со&nbsp встрое...'
+  '_yoast_wpseo_focuskw': 'Рукосушилка Electrolux EHDA – 2500'
+  '_yoast_wpseo_canonical': 'https://kvanta42.ru/product/rukosushilka-electrolux-ehda-2500/'
+  '_yoast_wpseo_opengraph-title': '{og_title_template}'
+  '_yoast_wpseo_opengraph-description': '{og_description_template}'
+  '_yoast_wpseo_twitter-title': '{twitter_title_template}'
+  '_yoast_wpseo_twitter-description': '{twitter_description_template}'
+  '_yoast_wpseo_meta-robots-noindex': 'noindex'
+  '_yoast_wpseo_meta-robots-nofollow': 'nofollow'
+  '_yoast_wpseo_meta-robots-adv': 'noimageindex'
+  '_yoast_wpseo_schema_page_type': 'WebPage'
+  '_yoast_wpseo_schema_article_type': 'None'
+  'post_status': 'publish'
+  'comment_status': 'closed'
+  'post_author': '1'
+  'stock_status': 'instock'
+  'manage_stock': 'no'
+  'sold_individually': 'no'
+  'backorders': 'no'
+  'downloadable': 'no'
+  'virtual': 'no'
+  'tax_status': 'taxable'
+  'download_limit': ''-1'
+  'download_expiry': ''-1'
+  'menu_order': '0'
+  'featured': 'no'
+  'post_date': '2026-02-02 10:00:00'
+
+[DEBUG] Обработчик 'SpecsHandler' вернул 14 полей:
+  'weight': '5.1'
+  'meta:weight_unit': 'kg'
+  'height': '24'
+  'meta:height_unit': 'cm'
+  'width': '27'
+  'meta:width_unit': 'cm'
+  'length': '14.2'
+  'meta:length_unit': 'cm'
+  'attribute:pa_oblast-primeneniya': 'Офисное оборудование'
+  'attribute:pa_tsvet-korpusa': 'Серый'
+  'attribute:pa_strana-proizvodstva': 'КНР'
+  'attribute:pa_garantiynyy-srok': '2 года'
+  'attribute:pa_srok-sluzhby': '5 лет'
+  'attribute:pa_seriya': 'EHDA'
+
+[DEBUG] Обработчик 'MediaHandler' вернул 3 полей:
+  'images': 'https://kvanta42.ru/wp-content/uploads/2026/02/ns-0028148-rukosushilka-electrolux-ehda-2500-1.webp ! alt : Рукосушилка Electrolux EHDA – 2500 ! title : Рукосушилка Electrolux EHDA – 2500 ! desc : ! caption : | https://kvanta42.ru/wp-content/uploads/2026/02/ns-0028148-rukosushilka-electrolux-ehda-2500-2.webp ! alt : Рукосушилка Electrolux EHDA – 2500 ! title : Рукосушилка Electrolux EHDA – 2500 ! desc : ! caption : | https://kvanta42.ru/wp-content/uploads/2026/02/ns-0028148-rukosushilka-electrolux-ehda-2500-3.webp ! alt : Рукосушилка Electrolux EHDA – 2500 ! title : Рукосушилка Electrolux EHDA – 2500 ! desc : ! caption : | https://kvanta42.ru/wp-content/uploads/2026/02/ns-0028148-rukosushilka-electrolux-ehda-2500-4.webp ! alt : Рукосушилка Electrolux EHDA – 2500 ! title : Рукосушилка Electrolux EHDA – 2500 ! desc : ! caption : | https://kvanta42.ru/wp-content/uploads/2026/02/ns-0028148-rukosushilka-electrolux-ehda-2500-5.webp ! alt : Рукосушилка Electrolux EHDA – 2500 ! title : Рукосушилка Electrolux EHDA – 2500 ! desc : ! caption : | https://kvanta42.ru/wp-content/uploads/2026/02/ns-0028148-rukosushilka-electrolux-ehda-2500-6.webp ! alt : Рукосушилка Electrolux EHDA – 2500 ! title : Рукосушилка Electrolux EHDA – 2500 ! desc : ! caption : | https://kvanta42.ru/wp-content/uploads/2026/02/ns-0028148-rukosushilka-electrolux-ehda-2500-7.webp ! alt : Рукосушилка Electrolux EHDA – 2500 ! title : Рукосушилка Electrolux EHDA – 2500 ! desc : ! caption : | https://kvanta42.ru/wp-content/uploads/2026/02/ns-0028148-rukosushilka-electrolux-ehda-2500-8.webp 
+! alt : Рукосушилка Electrolux EHDA – 2500 ! title : Рукосушилка Electrolux EHDA – 2500 ! desc : ! caption :'
+  'meta:сертификат_url': 'https://rkcdn.ru/products/a4c0a8b1-1a00-11f0-b8de-00505601218a/src.pdf,https://rkcdn.ru/products/a4c0a89d-1a00-11f0-b8de-00505601218a/src.pdf'
+  'meta:инструкция_url': 'https://rkcdn.ru/products/8dd9aa28-1e06-11e8-bfad-ac162d7b6f40/src.pdf'
+
+[DEBUG] Обработчик 'ContentHandler' вернул 1 полей:
+  'post_content': '<p>Рукосушка Electrolux EHDA-2500&nbsp представляет собой автоматическую сушилку для рук, изготовленную по&nbsp особой антивандальной технологии, со&nbsp встроенным инфракрасным датчиком высокой чувствительности.<br /><br />Современный дизайн прибора подчеркивают обтекаемые формы конструкции и&nbsp стильный металлический корпус, что обеспечивает гармоничное сочетание сушилки с&nbsp любым интерьером помещения. </p><br /><br /><h3>Конструкция</h3><br /><p>В рукосушках серии EHDA-2500&nbsp встроен чувствительный инфракрасный датчик, который срабатывает и&nbsp включает прибор в&nbsp тот момент, когда Вы&nbsp подносите к&nbsp нему руки. Данный тип включения позволяет быстро и&nbsp гигиенично высушить руки, что особенно важно в&nbsp общественных местах, больницах и&nbsp офисах.<br /><br />Для повышения эффективности был разработан мотор, который создает скорость потока до&nbsp 30&nbsp м/с, благодаря этому время сушки сведено к&nbsp минимуму (10-15&nbsp сек.). <br /><br />Рукосушки выполнены по&nbsp особой антивандальной технологии. Кожух приборов изготовлен из&nbsp металла, а&nbsp внутренняя часть изготовлена из&nbsp особо стойкого к&nbsp механическим повреждениям сплава&nbsp &#151  силумина (сплав алюминия и&nbsp кремния). Благодаря этому все внутренние узлы рукосушки надежны и&nbsp защищены от&nbsp внешних повреждений. 
+<br />Полученный запас прочности прибора дает уверенность в&nbsp стабильной работе прибора в&nbsp любых условиях. <br /><br />Воздуховыпускное отверстие рукосушки защищено специальной защитной решеткой выдерживающей высокие температуры и&nbsp защищающей устройство от&nbsp попадания посторонних предметов. <br /><br />Благодаря устройству рукосушки и&nbsp инфракрасному датчику включения и&nbsp отключения, прибор исключает лишние затраты на&nbsp электричество, что важно при постоянном использовании прибора. </p><br /><br /><h3>Принцип действия</h3><br /><p>Сушилка для рук работает по&nbsp принципу бесконтактного сенсорного включения/отключения.<br /><br />При расположении 
+рук пользователя на&nbsp расстоянии до&nbsp 11&nbsp см&nbsp от воздуховыпускного отверстия срабатывает инфракрасный датчик, автоматически включающий сушилку. Как только руки пользователя оказываются вне досягаемости ИК-датчика, прибор автоматически отключается. </p><br /><br /><h3>Отличительные особенности</h3><br /><ul><br /><li> антивандальное исполнение<br /><li> металлический корпус (внутренняя часть&nbsp &#151  силумин)<br /><li> инфракрасный 
+датчик<br /><li> turbo-сушка<br /><li> экономичное энергопотребление<br /><li> автоматическое включение/отключение<br /><li> удобство в&nbsp эксплуатации<br /><li> широкий диапазон применения<br /><li> современный дизайн<br /></ul><br /><br /><h3>Преимущества</h3><br /><p>Антивандальное исполнение сушилки для рук обеспечивает надежную защиту всех внутренних узлов прибора от&nbsp механических повреждений внешней среды, что расширяет возможности использования прибора. <br /><br />Инфракрасный датчик включения/отключения в&nbsp сочетании с&nbsp продуманной конструкцией прибора исключают лишние энергозатраты, экономно расходуя электроэнергию на&nbsp протяжении всего срока эксплуатации прибора. <br /><br />Режим &laquo turbo&raquo  со&nbsp скоростью потока горячего воздуха до&nbsp 30&nbsp м/с, позволяет максимально быстро и&nbsp комфортно высушить руки. </p><br /><br /><h3>Монтаж</h3><br /><p>Сушилка для рук крепится к&nbsp стене с&nbsp помощью болтов и&nbsp других крепежных приспособлений (входят в&nbsp комплект) и&nbsp подключается к&nbsp сети электропитания скрытой проводкой (внутренний монтаж). </p><br /><br /><h3>Применение</h3><br /><p>EHDA-2500&nbsp широко используется в&nbsp офисных, лечебных, общественных и&nbsp других типах учреждений с&nbsp большим потоком людей, нуждающихся в&nbsp быстрой и&nbsp гигиеничной сушке рук. </p><br /><br /><h3>Гарантия качества</h3><br /><p>Сушилка для рук Electrolux сертифицирована на&nbsp территории России и&nbsp соответствует требованиям нормативных документов по&nbsp ГОСТ. </p><br /><br /><h3>Рекомендации</h3><br /><p>Не перекрывайте в&nbsp приборе вводное и&nbsp выпускное отверстия для воздуха.<br /><br />Избегайте попадания воды непосредственно в&nbsp сушилку. </p>
+
+<h2>Технические характеристики</h2>
+<ul>
+<li><strong>HEPA (фильтр тонкой очистки):</strong> Нет</li>
+<li><strong>Pre Filter (фильтр предварительной очистки):</strong> Нет</li>
+<li><strong>Антивандальное исполнение корпуса:</strong> Да</li>
+<li><strong>Вариант размещения:</strong> Вертикальное</li>
+<li><strong>Вид управления:</strong> Сенсорное</li>
+<li><strong>Вид установки (крепления):</strong> Настенная</li>
+<li><strong>Время непрерывной работы прибора:</strong> 1 мин</li>
+<li><strong>Высота товара:</strong> 24 см</li>
+<li><strong>Высота упаковки товара:</strong> 18 см</li>
+<li><strong>Гарантийный документ:</strong> Гарантийный талон</li>
+<li><strong>Гарантийный срок:</strong> 2 года</li>
+<li><strong>Глубина товара:</strong> 14.2 см</li>
+<li><strong>Глубина упаковки товара:</strong> 27.5 см</li>
+<li><strong>Длина кабеля:</strong> 1 м</li>
+<li><strong>Защита от перегрева:</strong> Да</li>
+<li><strong>Индикация включения:</strong> Нет</li>
+<li><strong>Класс пылевлагозащищенности:</strong> IPX1</li>
+<li><strong>Количество режимов нагрева:</strong> Да</li>
+<li><strong>Макс. потребляемая мощность:</strong> 2.5 кВт</li>
+<li><strong>Макс. скорость потока:</strong> 26 м|с</li>
+<li><strong>Максимальный уровень шума на выходе:</strong> 80 дБ</li>
+<li><strong>Масса товара (нетто):</strong> 5.1 кг</li>
+<li><strong>Масса товара с упаковкой (брутто):</strong> 5.5 кг</li>
+<li><strong>Материал корпуса:</strong> Нержавеющая сталь</li>
+<li><strong>Набор крепежных элементов в комплекте:</strong> Да</li>
+<li><strong>Напряжение электропитания, В:</strong> 220 - 240 В</li>
+<li><strong>Область применения:</strong> Офисное оборудование</li>
+<li><strong>Потребляемая мощность в режиме 'без нагрева':</strong> 2500 Вт</li>
+<li><strong>Серия:</strong> EHDA</li>
+<li><strong>Сетевой кабель:</strong> Да (с вилкой)</li>
+<li><strong>Срок службы:</strong> 5 лет</li>
+<li><strong>Страна производства:</strong> КНР</li>
+<li><strong>Температура воздуха на выходе:</strong> до 50 °С</li>
+<li><strong>Тип сушилки:</strong> Классическая</li>
+<li><strong>УФ-обеззараживание:</strong> Нет</li>
+<li><strong>Фильтры очистки воздуха:</strong> Нет</li>
+<li><strong>Форма корпуса:</strong> Дизайнерская</li>
+<li><strong>Цвет корпуса:</strong> Серый</li>
+<li><strong>Ширина товара:</strong> 27 см</li>
+<li><strong>Ширина упаковки товара:</strong> 30.5 см</li>
+</ul>
+
+<h3>Документация</h3>
+<p><img style="vertical-align: middle; margin-right: 8px;" src="https://вашсайт.ru/wp-content/uploads/2026/02/pdf-icon.png" alt="PDF" width="32" height="32" /><a href="https://rkcdn.ru/products/a4c0a8b1-1a00-11f0-b8de-00505601218a/src.pdf,https://rkcdn.ru/products/a4c0a89d-1a00-11f0-b8de-00505601218a/src.pdf" target="_blank" rel="noopener noreferrer">Сертификат Рукосушилка Electrolux EHDA – 2500 (PDF)</a></p>
+<p><img style="vertical-align: middle; margin-right: 8px;" src="https://вашсайт.ru/wp-content/uploads/2026/02/pdf-icon.png" alt="PDF" width="32" height="32" /><a href="https://rkcdn.ru/products/8dd9aa28-1e06-11e8-bfad-ac162d7b6f40/src.pdf" target="_blank" rel="noopener noreferrer">Инструкция Рукосушилка Electrolux EHDA – 2500 (PDF)</a></p>
+
+<h3>Дополнительная информация</h3>
+<ul>
+<li><strong>Бренд:</strong> Electrolux</li>
+<li><strong>Артикул производителя:</strong> EHDA – 2500</li>
+<li><strong>НС-код:</strong> НС-0028148</li>
+<li><strong>Штрих-коды:</strong> 7312971100010, 7381032480187, 7390000301683</li>
+<li><strong>Эксклюзив:</strong> Нет</li>
+</ul>'
+
+[DEBUG] Итого объединено 63 полей
+[DEBUG _create_woo_product] Создаю WooProduct из 63 полей
+[DEBUG _set_woo_product_field] Ключ: 'post_title', Значение: 'Рукосушилка Electrolux EHDA – 2500'
+[DEBUG _set_woo_product_field] Ключ: 'post_name', Значение: 'rukosushilka-electrolux-ehda-2500'
+[DEBUG _set_woo_product_field] Ключ: 'sku', Значение: 'НС-0028148'
+[DEBUG _set_woo_product_field] Ключ: 'meta:артикул', Значение: 'EHDA – 2500'
+[DEBUG _set_woo_product_field] Ключ: 'regular_price', Значение: '14990'
+[DEBUG _set_woo_product_field] Ключ: 'tax:product_cat', Значение: 'Тепловое оборудование > Сушилки для рук > Сушилки для рук'
+[DEBUG _set_woo_product_field] Ключ: 'meta:_global_unique_id', Значение: '7312971100010'
+[DEBUG _set_woo_product_field] Ключ: 'meta:эксклюзив', Значение: 'Нет'
+[DEBUG _set_woo_product_field] Ключ: 'post_excerpt', Значение: 'Рукосушка Electrolux EHDA-2500&nbsp представляет собой автоматическую сушилку для рук, изготовленную по&nbsp особой антивандальной технологии, со&nbsp встрое...' 
+[DEBUG _set_woo_product_field] Ключ: 'meta:_yoast_wpseo_title', Значение: 'Рукосушилка Electrolux EHDA – 2500 | Electrolux | Купить в ООО «Кванта»'
+[DEBUG _set_woo_product_field] Ключ: 'meta:_yoast_wpseo_metadesc', Значение: 'Рукосушка Electrolux EHDA-2500&nbsp представляет собой автоматическую сушилку для рук, изготовленную по&nbsp особой антивандальной технологии, со&nbsp встрое...'
+[DEBUG _set_woo_product_field] Ключ: 'meta:_yoast_wpseo_focuskw', Значение: 'Рукосушилка Electrolux EHDA – 2500'
+[DEBUG _set_woo_product_field] Ключ: 'meta:_yoast_wpseo_canonical', Значение: 'https://kvanta42.ru/product/rukosushilka-electrolux-ehda-2500/'
+[DEBUG _set_woo_product_field] Ключ: 'meta:_yoast_wpseo_opengraph-title', Значение: 'Рукосушилка Electrolux EHDA – 2500'
+[DEBUG _set_woo_product_field] Ключ: 'meta:_yoast_wpseo_opengraph-description', Значение: 'Рукосушка Electrolux EHDA-2500&nbsp представляет собой автоматическую сушилку для рук, изготовленную по&nbsp особой антивандальной технологии, со&nbsp встрое...'
+[DEBUG _set_woo_product_field] Ключ: 'meta:_yoast_wpseo_twitter-title', Значение: 'Рукосушилка Electrolux EHDA – 2500'
+[DEBUG _set_woo_product_field] Ключ: 'meta:_yoast_wpseo_twitter-description', Значение: 'Рукосушка Electrolux EHDA-2500&nbsp представляет собой автоматическую сушилку для рук, изготовленную по&nbsp особой антивандальной технологии, со&nbsp встрое...'
+[DEBUG _set_woo_product_field] Ключ: '_yoast_wpseo_title', Значение: 'Рукосушилка Electrolux EHDA – 2500 | Electrolux | Купить в ООО «Кванта»'
+[DEBUG _set_woo_product_field] Ключ: '_yoast_wpseo_metadesc', Значение: 'Рукосушка Electrolux EHDA-2500&nbsp представляет собой автоматическую сушилку для рук, изготовленную по&nbsp особой антивандальной технологии, со&nbsp встрое...'
+[DEBUG _set_woo_product_field] Ключ: '_yoast_wpseo_focuskw', Значение: 'Рукосушилка Electrolux EHDA – 2500'
+[DEBUG _set_woo_product_field] Ключ: '_yoast_wpseo_canonical', Значение: 'https://kvanta42.ru/product/rukosushilka-electrolux-ehda-2500/'
+[DEBUG _set_woo_product_field] Ключ: '_yoast_wpseo_opengraph-title', Значение: '{og_title_template}'
+[DEBUG _set_woo_product_field] Ключ: '_yoast_wpseo_opengraph-description', Значение: '{og_description_template}'
+[DEBUG _set_woo_product_field] Ключ: '_yoast_wpseo_twitter-title', Значение: '{twitter_title_template}'
+[DEBUG _set_woo_product_field] Ключ: '_yoast_wpseo_twitter-description', Значение: '{twitter_description_template}'
+[DEBUG _set_woo_product_field] Ключ: '_yoast_wpseo_meta-robots-noindex', Значение: 'noindex'
+[DEBUG _set_woo_product_field] Ключ: '_yoast_wpseo_meta-robots-nofollow', Значение: 'nofollow'
+[DEBUG _set_woo_product_field] Ключ: '_yoast_wpseo_meta-robots-adv', Значение: 'noimageindex'
+[DEBUG _set_woo_product_field] Ключ: '_yoast_wpseo_schema_page_type', Значение: 'WebPage'
+[DEBUG _set_woo_product_field] Ключ: '_yoast_wpseo_schema_article_type', Значение: 'None'
+[DEBUG _set_woo_product_field] Ключ: 'post_status', Значение: 'publish'
+[DEBUG _set_woo_product_field] Ключ: 'comment_status', Значение: 'closed'
+[DEBUG _set_woo_product_field] Ключ: 'post_author', Значение: '1'
+[DEBUG _set_woo_product_field] Ключ: 'stock_status', Значение: 'instock'
+[DEBUG _set_woo_product_field] Ключ: 'manage_stock', Значение: 'no'
+[DEBUG _set_woo_product_field] Ключ: 'sold_individually', Значение: 'no'
+[DEBUG _set_woo_product_field] Ключ: 'backorders', Значение: 'no'
+[DEBUG _set_woo_product_field] Ключ: 'downloadable', Значение: 'no'
+[DEBUG _set_woo_product_field] Ключ: 'virtual', Значение: 'no'
+[DEBUG _set_woo_product_field] Ключ: 'tax_status', Значение: 'taxable'
+[DEBUG _set_woo_product_field] Ключ: 'download_limit', Значение: ''-1'
+[DEBUG _set_woo_product_field] Ключ: 'download_expiry', Значение: ''-1'
+[DEBUG _set_woo_product_field] Ключ: 'menu_order', Значение: '0'
+[DEBUG _set_woo_product_field] Ключ: 'featured', Значение: 'no'
+[DEBUG _set_woo_product_field] Ключ: 'post_date', Значение: '2026-02-02 10:00:00'
+[DEBUG _set_woo_product_field] Ключ: 'weight', Значение: '5.1'
+[DEBUG _set_woo_product_field] Ключ: 'meta:weight_unit', Значение: 'kg'
+[DEBUG _set_woo_product_field] Ключ: 'height', Значение: '24'
+[DEBUG _set_woo_product_field] Ключ: 'meta:height_unit', Значение: 'cm'
+[DEBUG _set_woo_product_field] Ключ: 'width', Значение: '27'
+[DEBUG _set_woo_product_field] Ключ: 'meta:width_unit', Значение: 'cm'
+[DEBUG _set_woo_product_field] Ключ: 'length', Значение: '14.2'
+[DEBUG _set_woo_product_field] Ключ: 'meta:length_unit', Значение: 'cm'
+[DEBUG _set_woo_product_field] Ключ: 'attribute:pa_oblast-primeneniya', Значение: 'Офисное оборудование'
+[DEBUG _set_woo_product_field] Ключ: 'attribute:pa_tsvet-korpusa', Значение: 'Серый'
+[DEBUG _set_woo_product_field] Ключ: 'attribute:pa_strana-proizvodstva', Значение: 'КНР'
+[DEBUG _set_woo_product_field] Ключ: 'attribute:pa_garantiynyy-srok', Значение: '2 года'
+[DEBUG _set_woo_product_field] Ключ: 'attribute:pa_srok-sluzhby', Значение: '5 лет'
+[DEBUG _set_woo_product_field] Ключ: 'attribute:pa_seriya', Значение: 'EHDA'
+[DEBUG _set_woo_product_field] Ключ: 'images', Значение: 'https://kvanta42.ru/wp-content/uploads/2026/02/ns-0028148-rukosushilka-electrolux-ehda-2500-1.webp ! alt : Рукосушилка Electrolux EHDA – 2500 ! title : Рукосушилка Electrolux EHDA – 2500 ! desc : ! caption : | https://kvanta42.ru/wp-content/uploads/2026/02/ns-0028148-rukosushilka-electrolux-ehda-2500-2.webp ! alt : Рукосушилка Electrolux EHDA – 2500 ! title : Рукосушилка Electrolux EHDA – 2500 ! desc : ! caption : | https://kvanta42.ru/wp-content/uploads/2026/02/ns-0028148-rukosushilka-electrolux-ehda-2500-3.webp ! alt : Рукосушилка Electrolux EHDA – 2500 ! title : Рукосушилка Electrolux EHDA – 2500 ! desc : ! caption : | https://kvanta42.ru/wp-content/uploads/2026/02/ns-0028148-rukosushilka-electrolux-ehda-2500-4.webp ! alt : Рукосушилка Electrolux EHDA – 2500 ! title : Рукосушилка Electrolux EHDA – 2500 ! desc : ! caption : | https://kvanta42.ru/wp-content/uploads/2026/02/ns-0028148-rukosushilka-electrolux-ehda-2500-5.webp ! alt : Рукосушилка Electrolux EHDA – 2500 ! title : Рукосушилка Electrolux EHDA – 2500 ! desc : ! caption : | https://kvanta42.ru/wp-content/uploads/2026/02/ns-0028148-rukosushilka-electrolux-ehda-2500-6.webp ! alt : Рукосушилка Electrolux EHDA – 2500 ! title : Рукосушилка Electrolux EHDA – 2500 ! desc : ! caption : | https://kvanta42.ru/wp-content/uploads/2026/02/ns-0028148-rukosushilka-electrolux-ehda-2500-7.webp ! alt : Рукосушилка Electrolux EHDA – 2500 ! title : Рукосушилка Electrolux EHDA – 2500 ! desc : ! caption : | https://kvanta42.ru/wp-content/uploads/2026/02/ns-0028148-rukosushilka-electrolux-ehda-2500-8.webp ! alt : Рукосушилка Electrolux EHDA – 2500 ! title : Рукосушилка Electrolux EHDA – 2500 ! desc : ! caption :'
+[DEBUG _set_woo_product_field] Ключ: 'meta:сертификат_url', Значение: 'https://rkcdn.ru/products/a4c0a8b1-1a00-11f0-b8de-00505601218a/src.pdf,https://rkcdn.ru/products/a4c0a89d-1a00-11f0-b8de-00505601218a/src.pdf'
+[DEBUG _set_woo_product_field] Ключ: 'meta:инструкция_url', Значение: 'https://rkcdn.ru/products/8dd9aa28-1e06-11e8-bfad-ac162d7b6f40/src.pdf'
+[DEBUG _set_woo_product_field] Ключ: 'post_content', Значение: '<p>Рукосушка Electrolux EHDA-2500&nbsp представляет собой автоматическую сушилку для рук, изготовленную по&nbsp особой антивандальной технологии, со&nbsp встроенным инфракрасным датчиком высокой чувствительности.<br /><br />Современный дизайн прибора подчеркивают обтекаемые формы конструкции и&nbsp стильный металлический корпус, что обеспечивает гармоничное сочетание сушилки с&nbsp любым интерьером помещения. </p><br /><br /><h3>Конструкция</h3><br /><p>В рукосушках серии EHDA-2500&nbsp встроен чувствительный инфракрасный датчик, который срабатывает и&nbsp включает прибор в&nbsp тот момент, когда Вы&nbsp подносите к&nbsp нему руки. Данный тип включения позволяет быстро и&nbsp гигиенично высушить руки, что особенно важно в&nbsp общественных местах, больницах и&nbsp офисах.<br /><br />Для повышения эффективности был разработан мотор, который создает скорость потока до&nbsp 30&nbsp м/с, благодаря этому время сушки сведено к&nbsp минимуму (10-15&nbsp сек.). <br /><br />Рукосушки выполнены по&nbsp особой антивандальной технологии. Кожух приборов изготовлен из&nbsp металла, а&nbsp внутренняя часть изготовлена из&nbsp особо стойкого к&nbsp механическим повреждениям сплава&nbsp &#151  силумина (сплав алюминия и&nbsp кремния). Благодаря этому все внутренние узлы рукосушки надежны 
+и&nbsp защищены от&nbsp внешних повреждений. <br />Полученный запас прочности прибора дает уверенность в&nbsp стабильной работе прибора в&nbsp любых условиях. <br /><br />Воздуховыпускное отверстие рукосушки защищено специальной защитной решеткой выдерживающей высокие температуры и&nbsp защищающей устройство от&nbsp попадания посторонних предметов. <br /><br />Благодаря устройству рукосушки и&nbsp инфракрасному датчику включения и&nbsp отключения, 
+прибор исключает лишние затраты на&nbsp электричество, что важно при постоянном использовании прибора. </p><br /><br /><h3>Принцип действия</h3><br /><p>Сушилка для рук работает по&nbsp принципу бесконтактного сенсорного включения/отключения.<br /><br />При расположении рук пользователя на&nbsp расстоянии до&nbsp 11&nbsp см&nbsp от воздуховыпускного отверстия срабатывает инфракрасный датчик, автоматически включающий сушилку. Как только руки пользователя оказываются вне досягаемости ИК-датчика, прибор автоматически отключается. </p><br /><br /><h3>Отличительные особенности</h3><br /><ul><br /><li> антивандальное исполнение<br /><li> металлический корпус (внутренняя часть&nbsp &#151  силумин)<br /><li> инфракрасный датчик<br /><li> turbo-сушка<br /><li> экономичное энергопотребление<br /><li> автоматическое включение/отключение<br /><li> удобство в&nbsp эксплуатации<br /><li> широкий диапазон 
+применения<br /><li> современный дизайн<br /></ul><br /><br /><h3>Преимущества</h3><br /><p>Антивандальное исполнение сушилки для рук обеспечивает надежную защиту всех внутренних узлов прибора от&nbsp механических повреждений 
+внешней среды, что расширяет возможности использования прибора. <br /><br />Инфракрасный датчик включения/отключения в&nbsp сочетании с&nbsp продуманной конструкцией прибора исключают лишние энергозатраты, экономно расходуя электроэнергию на&nbsp протяжении всего срока эксплуатации прибора. <br /><br />Режим &laquo turbo&raquo  со&nbsp скоростью потока горячего воздуха до&nbsp 30&nbsp м/с, позволяет максимально быстро и&nbsp комфортно высушить руки. </p><br /><br /><h3>Монтаж</h3><br /><p>Сушилка для рук крепится к&nbsp стене с&nbsp помощью болтов и&nbsp других крепежных приспособлений (входят в&nbsp комплект) и&nbsp подключается к&nbsp сети электропитания скрытой проводкой (внутренний монтаж). </p><br /><br /><h3>Применение</h3><br /><p>EHDA-2500&nbsp широко используется в&nbsp офисных, лечебных, общественных и&nbsp других типах учреждений с&nbsp большим потоком людей, нуждающихся в&nbsp быстрой и&nbsp гигиеничной сушке рук. </p><br /><br /><h3>Гарантия качества</h3><br /><p>Сушилка для рук Electrolux сертифицирована на&nbsp территории России и&nbsp соответствует требованиям нормативных документов по&nbsp ГОСТ. 
+</p><br /><br /><h3>Рекомендации</h3><br /><p>Не перекрывайте в&nbsp приборе вводное и&nbsp выпускное отверстия для воздуха.<br /><br />Избегайте попадания воды непосредственно в&nbsp сушилку. </p>
+
+<h2>Технические характеристики</h2>
+<ul>
+<li><strong>HEPA (фильтр тонкой очистки):</strong> Нет</li>
+<li><strong>Pre Filter (фильтр предварительной очистки):</strong> Нет</li>
+<li><strong>Антивандальное исполнение корпуса:</strong> Да</li>
+<li><strong>Вариант размещения:</strong> Вертикальное</li>
+<li><strong>Вид управления:</strong> Сенсорное</li>
+<li><strong>Вид установки (крепления):</strong> Настенная</li>
+<li><strong>Время непрерывной работы прибора:</strong> 1 мин</li>
+<li><strong>Высота товара:</strong> 24 см</li>
+<li><strong>Высота упаковки товара:</strong> 18 см</li>
+<li><strong>Гарантийный документ:</strong> Гарантийный талон</li>
+<li><strong>Гарантийный срок:</strong> 2 года</li>
+<li><strong>Глубина товара:</strong> 14.2 см</li>
+<li><strong>Глубина упаковки товара:</strong> 27.5 см</li>
+<li><strong>Длина кабеля:</strong> 1 м</li>
+<li><strong>Защита от перегрева:</strong> Да</li>
+<li><strong>Индикация включения:</strong> Нет</li>
+<li><strong>Класс пылевлагозащищенности:</strong> IPX1</li>
+<li><strong>Количество режимов нагрева:</strong> Да</li>
+<li><strong>Макс. потребляемая мощность:</strong> 2.5 кВт</li>
+<li><strong>Макс. скорость потока:</strong> 26 м|с</li>
+<li><strong>Максимальный уровень шума на выходе:</strong> 80 дБ</li>
+<li><strong>Масса товара (нетто):</strong> 5.1 кг</li>
+<li><strong>Масса товара с упаковкой (брутто):</strong> 5.5 кг</li>
+<li><strong>Материал корпуса:</strong> Нержавеющая сталь</li>
+<li><strong>Набор крепежных элементов в комплекте:</strong> Да</li>
+<li><strong>Напряжение электропитания, В:</strong> 220 - 240 В</li>
+<li><strong>Область применения:</strong> Офисное оборудование</li>
+<li><strong>Потребляемая мощность в режиме 'без нагрева':</strong> 2500 Вт</li>
+<li><strong>Серия:</strong> EHDA</li>
+<li><strong>Сетевой кабель:</strong> Да (с вилкой)</li>
+<li><strong>Срок службы:</strong> 5 лет</li>
+<li><strong>Страна производства:</strong> КНР</li>
+<li><strong>Температура воздуха на выходе:</strong> до 50 °С</li>
+<li><strong>Тип сушилки:</strong> Классическая</li>
+<li><strong>УФ-обеззараживание:</strong> Нет</li>
+<li><strong>Фильтры очистки воздуха:</strong> Нет</li>
+<li><strong>Форма корпуса:</strong> Дизайнерская</li>
+<li><strong>Цвет корпуса:</strong> Серый</li>
+<li><strong>Ширина товара:</strong> 27 см</li>
+<li><strong>Ширина упаковки товара:</strong> 30.5 см</li>
+</ul>
+
+<h3>Документация</h3>
+<p><img style="vertical-align: middle; margin-right: 8px;" src="https://вашсайт.ru/wp-content/uploads/2026/02/pdf-icon.png" alt="PDF" width="32" height="32" /><a href="https://rkcdn.ru/products/a4c0a8b1-1a00-11f0-b8de-00505601218a/src.pdf,https://rkcdn.ru/products/a4c0a89d-1a00-11f0-b8de-00505601218a/src.pdf" target="_blank" rel="noopener noreferrer">Сертификат Рукосушилка Electrolux EHDA – 2500 (PDF)</a></p>
+<p><img style="vertical-align: middle; margin-right: 8px;" src="https://вашсайт.ru/wp-content/uploads/2026/02/pdf-icon.png" alt="PDF" width="32" height="32" /><a href="https://rkcdn.ru/products/8dd9aa28-1e06-11e8-bfad-ac162d7b6f40/src.pdf" target="_blank" rel="noopener noreferrer">Инструкция Рукосушилка Electrolux EHDA – 2500 (PDF)</a></p>
+
+<h3>Дополнительная информация</h3>
+<ul>
+<li><strong>Бренд:</strong> Electrolux</li>
+<li><strong>Артикул производителя:</strong> EHDA – 2500</li>
+<li><strong>НС-код:</strong> НС-0028148</li>
+<li><strong>Штрих-коды:</strong> 7312971100010, 7381032480187, 7390000301683</li>
+<li><strong>Эксклюзив:</strong> Нет</li>
+</ul>'
+
+[DEBUG] === Итоговый WooProduct ===
+Атрибуты: {'attribute:pa_oblast-primeneniya': 'Офисное оборудование', 'attribute:pa_tsvet-korpusa': 'Серый', 'attribute:pa_strana-proizvodstva': 'КНР', 'attribute:pa_garantiynyy-srok': '2 года', 'attribute:pa_srok-sluzhby': '5 лет', 'attribute:pa_seriya': 'EHDA'}
+Всего атрибутов: 6
+  'attribute:pa_oblast-primeneniya': 'Офисное оборудование'
+  'attribute:pa_tsvet-korpusa': 'Серый'
+  'attribute:pa_strana-proizvodstva': 'КНР'
+  'attribute:pa_garantiynyy-srok': '2 года'
+  'attribute:pa_srok-sluzhby': '5 лет'
+  'attribute:pa_seriya': 'EHDA'
+=== Конец отладки ===
+
+[DEBUG _set_woo_product_field] Ключ: 'tax:product_type', Значение: 'simple'
+[DEBUG _set_woo_product_field] Ключ: 'ID', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'post_parent', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'parent_sku', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'children', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'sale_price', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'stock', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'low_stock_amount', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'tax_class', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'visibility', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'tax:product_visibility', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'tax:product_tag', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'tax:product_shipping_class', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'upsell_ids', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'crosssell_ids', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'purchase_note', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'sale_price_dates_from', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'sale_price_dates_to', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'product_url', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'button_text', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'product_page_url', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'meta:total_sales', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'meta:_yoast_wpseo_bctitle', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'meta:_yoast_wpseo_meta-robots-adv', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'meta:_yoast_wpseo_is_cornerstone', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'meta:_yoast_wpseo_linkdex', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'meta:_yoast_wpseo_estimated-reading-time-minutes', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'meta:_yoast_wpseo_content_score', Значение: ''
+[DEBUG _set_woo_product_field] Ключ: 'meta:_yoast_wpseo_metakeywords', Значение: ''
+2026-02-01 15:03:16 - v2.converter - INFO - Экспорт 1 продуктов в data\output\converted_20260201_150308.csv
+2026-02-01 15:03:16 - v2.converter - INFO - Колонок в CSV: 94
+[DEBUG to_woocommerce_dict] Атрибуты (6): {'attribute:pa_oblast-primeneniya': 'Офисное оборудование', 'attribute:pa_tsvet-korpusa': 'Серый', 'attribute:pa_strana-proizvodstva': 'КНР', 'attribute:pa_garantiynyy-srok': '2 года', 'attribute:pa_srok-sluzhby': '5 лет', 'attribute:pa_seriya': 'EHDA'}
+[DEBUG] Обрабатываю атрибут: 'attribute:pa_oblast-primeneniya' = 'Офисное оборудование'
+[DEBUG] Добавлен attribute_data: name:Область применения|value:Офисное оборудование|visible:1|taxonomy:1
+[DEBUG] Обрабатываю атрибут: 'attribute:pa_tsvet-korpusa' = 'Серый'
+[DEBUG] Добавлен attribute_data: name:Цвет корпуса|value:Серый|visible:1|taxonomy:1
+[DEBUG] Обрабатываю атрибут: 'attribute:pa_strana-proizvodstva' = 'КНР'
+[DEBUG] Добавлен attribute_data: name:Страна производства|value:КНР|visible:1|taxonomy:1
+[DEBUG] Обрабатываю атрибут: 'attribute:pa_garantiynyy-srok' = '2 года'
+[DEBUG] Добавлен attribute_data: name:Гарантийный срок|value:2 года|visible:1|taxonomy:1
+[DEBUG] Обрабатываю атрибут: 'attribute:pa_srok-sluzhby' = '5 лет'
+[DEBUG] Добавлен attribute_data: name:Срок службы|value:5 лет|visible:1|taxonomy:1
+[DEBUG] Обрабатываю атрибут: 'attribute:pa_seriya' = 'EHDA'
+[DEBUG] Добавлен attribute_data: name:Серия|value:EHDA|visible:1|taxonomy:1
+2026-02-01 15:03:16 - v2.converter - INFO - Экспорт завершен: data\output\converted_20260201_150308.csv
+2026-02-01 15:03:16 - v2.converter - INFO - Конвертация завершена: {'processed': 1, 'skipped': 0, 'errors': 0, 'output_path': 'E:\\AlexZ\\dev_project\\B2B-WC-Converter\\data\\output\\converted_20260201_150308.csv', 'log_path': 'E:\\AlexZ\\dev_project\\B2B-WC-Converter\\data\\logs\\errors.csv', 'duration': 7.622876}
+✅ Конвертация завершена успешно!
+   Обработано товаров: 1
+   Пропущено товаров: 0
+   Выходной файл: ~~~path~~~\B2B-WC-Converter\data\output\converted_20260201_150308.csv
+   Лог ошибок: ~~~path~~~\B2B-WC-Converter\data\logs\errors.csv
+   
+ 
