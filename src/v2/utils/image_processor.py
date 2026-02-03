@@ -15,8 +15,28 @@ class ImageProcessor:
     
     def __init__(self, config: dict):
         self.config = config
-        self.processing_config = config.get('image_processing', {})
         
+        # Используем плоскую структуру конфига
+        self.target_width = config.get('target_width', 1000)
+        self.quality = config.get('quality', 85)
+        self.add_noise = config.get('add_noise', True)
+        self.noise_level = config.get('noise_level', 0.02)
+        self.output_format = config.get('output_format', 'webp')
+        self.max_file_size_mb = config.get('max_file_size_mb', 1.0)
+        
+        # Путь для сохранения
+        if 'paths' in config and 'local_image_converted' in config['paths']:
+            self.output_dir = Path(config['paths']['local_image_converted'])
+        else:
+            # Дефолтный путь
+            self.output_dir = Path('data/downloads/converted/')
+        
+        # Создаем директорию
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"ImageProcessor инициализирован: width={self.target_width}, "
+                   f"quality={self.quality}, format={self.output_format}")
+    
     def process_image(self, input_path: Path) -> Optional[Path]:
         """
         Обрабатывает одно изображение.
@@ -36,41 +56,34 @@ class ImageProcessor:
                     img = img.convert('RGB')
                 
                 # 2. Ресайз до target_width с сохранением пропорций
-                target_width = self.processing_config.get('target_width', 1000)
-                if img.width > target_width:
-                    ratio = target_width / img.width
+                if img.width > self.target_width:
+                    ratio = self.target_width / img.width
                     new_height = int(img.height * ratio)
-                    img = img.resize((target_width, new_height), Image.Resampling.LANCZOS)
+                    img = img.resize((self.target_width, new_height), Image.Resampling.LANCZOS)
                 
                 # 3. Добавляем шум (легкое размытие)
-                if self.processing_config.get('add_noise', True):
-                    noise_level = self.processing_config.get('noise_level', 0.02)
-                    img = img.filter(ImageFilter.GaussianBlur(radius=noise_level))
+                if self.add_noise:
+                    img = img.filter(ImageFilter.GaussianBlur(radius=self.noise_level))
                 
                 # 4. Определяем выходной путь
-                output_dir = Path(self.config['paths']['local_image_converted'])
-                output_dir.mkdir(parents=True, exist_ok=True)
-                
-                output_format = self.processing_config.get('output_format', 'webp')
-                output_path = output_dir / f"{input_path.stem}.{output_format}"
+                output_path = self.output_dir / f"{input_path.stem}.{self.output_format}"
                 
                 # 5. Сохраняем с настройками качества БЕЗ метаданных
                 save_kwargs = {
-                    'quality': self.processing_config.get('quality', 85),
+                    'quality': self.quality,
                     'optimize': True,
                 }
                 
-                if output_format.lower() == 'webp':
+                if self.output_format.lower() == 'webp':
                     save_kwargs['method'] = 6  # Более медленный, но лучшее качество
                 
                 # Ключевой момент: save() без exif удаляет метаданные
                 img.save(output_path, **save_kwargs)
                 
                 # 6. Проверяем размер
-                max_size_mb = self.processing_config.get('max_file_size_mb', 1.0)
                 file_size_mb = output_path.stat().st_size / (1024 * 1024)
                 
-                if file_size_mb > max_size_mb:
+                if file_size_mb > self.max_file_size_mb:
                     logger.warning(f"Файл {output_path.name} слишком большой: {file_size_mb:.2f}MB")
                     # Можно добавить дополнительное сжатие
                 

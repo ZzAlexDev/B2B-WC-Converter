@@ -10,7 +10,7 @@ from .config_manager import ConfigManager
 from .handlers import (
     CoreHandler, 
     SpecsHandler, 
-    MediaHandler, 
+    MediaHandler,
     ContentHandler,
     TagsHandler
 )
@@ -54,13 +54,13 @@ class Aggregator:
                 if result:
                     handler_results[handler_name] = result
                     # ОТЛАДКА
-                    if handler_name == 'SpecsHandler':
-                        # print(f"\n[DEBUG] === SpecsHandler вернул ===")
-                        for key, val in result.items():
-                            print(f"  '{key}': '{val}'")
-                        # print(f"=== Всего {len(result)} полей ===\n")
-                else:
-                    logger.warning(f"  {handler_name}: вернул пустой результат")
+                #     if handler_name == 'SpecsHandler':
+                #         # print(f"\n[DEBUG] === SpecsHandler вернул ===")
+                #         for key, val in result.items():
+                #             # print(f"  '{key}': '{val}'")
+                #         # print(f"=== Всего {len(result)} полей ===\n")
+                # else:
+                #     logger.warning(f"  {handler_name}: вернул пустой результат")
                     
             except Exception as e:
                 logger.error(f"  {handler_name}: ошибка обработки - {e}")
@@ -133,7 +133,7 @@ class Aggregator:
     def _merge_handler_results(self, handler_results: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         merged = {}
         
-        print(f"[DEBUG Aggregator] Объединяю результаты от {len(handler_results)} обработчиков")
+        # print(f"[DEBUG Aggregator] Объединяю результаты от {len(handler_results)} обработчиков")
         
         for handler_name, result in handler_results.items():
             # print(f"\n[DEBUG] Обработчик '{handler_name}' вернул {len(result)} полей:")
@@ -152,7 +152,7 @@ class Aggregator:
     def _create_woo_product(self, data: Dict[str, Any]) -> WooProduct:
         woo_product = WooProduct()
         
-        print(f"[DEBUG _create_woo_product] Создаю WooProduct из {len(data)} полей")
+        # print(f"[DEBUG _create_woo_product] Создаю WooProduct из {len(data)} полей")
         
         for key, value in data.items():
             self._set_woo_product_field(woo_product, key, value)
@@ -160,7 +160,7 @@ class Aggregator:
         return woo_product
     
     def _set_woo_product_field(self, woo_product: WooProduct, key: str, value: Any) -> None:
-        print(f"[DEBUG _set_woo_product_field] Ключ: '{key}', Значение: '{value}'")
+        # print(f"[DEBUG _set_woo_product_field] Ключ: '{key}', Значение: '{value}'")
         
         if key.startswith('tax:'):
             field_name = 'tax_' + key[4:].replace('-', '_')

@@ -4,6 +4,7 @@
 """
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
+from dataclasses import dataclass
 
 # Используем относительные импорты
 try:
@@ -17,6 +18,14 @@ except ImportError:
     from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+@dataclass
+class ProcessingResult:
+    """Результат обработки данных"""
+    success: bool
+    data: Optional[Any] = None
+    error: Optional[str] = None
+    metadata: Optional[Dict] = None
 
 class BaseHandler(ABC):
     """

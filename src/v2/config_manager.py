@@ -27,6 +27,19 @@ class ConfigManager:
     # Кэш для быстрого доступа
     _config_path: Optional[Path] = None
     
+    # ДОБАВЬТЕ ЭТОТ КОНСТРУКТОР:
+    def __post_init__(self):
+        """Инициализация после создания dataclass"""
+        if self._config_path:
+            self.load_all_configs()
+            
+            # Отладочная информация
+            logger.info(f"Загруженные секции конфигурации: {list(self.settings.keys())}")
+            if 'paths' in self.settings:
+                logger.info(f"Секция paths содержит: {list(self.settings['paths'].keys())}")
+            else:
+                logger.warning("Секция 'paths' не найдена в конфигурации!")
+    
     @classmethod
     def from_directory(cls, config_path: str) -> 'ConfigManager':
         """
@@ -49,8 +62,9 @@ class ConfigManager:
         
         logger.info(f"Загрузка конфигурации из: {config_dir}")
         
+        # Используем dataclass конструктор
         instance = cls(_config_path=config_dir)
-        instance.load_all_configs()
+        # load_all_configs вызовется в __post_init__
         
         return instance
     
@@ -310,3 +324,6 @@ class ConfigManager:
         
         files_info = ", ".join([f"{name} ({count} байт)" for name, count in config_files])
         return f"ConfigManager: {files_info}"
+    
+
+    

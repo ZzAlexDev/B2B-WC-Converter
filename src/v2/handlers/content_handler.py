@@ -1,36 +1,128 @@
 """
-ContentHandler - обработчик текстового контента для B2B-WC Converter v2.0.
-Обрабатывает: HTML описание, характеристики, документы, видео.
+ContentHandler - обработчик контента для B2B-WC Converter v2.0.
 """
 import re
-import logging
-from typing import Dict, Any, List, Tuple
-from urllib.parse import urlparse
-from html import unescape
+import sys
+from pathlib import Path
+from typing import Dict, Any, List, Optional, Tuple, Union, Callable
+from urllib.parse import urlparse  # <-- Добавьте этот импорт!
 
-# Используем относительные импорты
+# Пробуем импортировать
 try:
+    # Вариант 1: относительный импорт
     from .base_handler import BaseHandler
     from ..models import RawProduct
     from ..config_manager import ConfigManager
-    from ..utils.logger import get_logger
-    from ..utils.validators import (
-        extract_youtube_id,
-        normalize_yes_no,
-        parse_specifications
+    from ..utils import (
+        get_logger,
+        extract_youtube_id,           # <-- Добавьте!
+        normalize_yes_no,             # <-- Добавьте!
+        parse_specifications          # <-- Добавьте!
     )
-except ImportError:
-    from base_handler import BaseHandler
-    from models import RawProduct
-    from config_manager import ConfigManager
-    from utils.logger import get_logger
-    from utils.validators import (
-        extract_youtube_id,
-        normalize_yes_no,
-        parse_specifications
-    )
+except ImportError as e:
+    print(f"❌ Ошибка импорта в ContentHandler (вариант 1): {e}")
+    try:
+        # Вариант 2: абсолютный импорт
+        from src.v2.handlers.base_handler import BaseHandler
+        from src.v2.models import RawProduct
+        from src.v2.config_manager import ConfigManager
+        from src.v2.utils import (
+            get_logger,
+            extract_youtube_id,       # <-- Добавьте!
+            normalize_yes_no,         # <-- Добавьте!
+            parse_specifications      # <-- Добавьте!
+        )
+    except ImportError as e:
+        print(f"❌ Ошибка импорта в ContentHandler (вариант 2): {e}")
+        # Вариант 3: добавляем путь и импортируем напрямую
+        current_dir = Path(__file__).parent
+        project_root = current_dir.parent.parent.parent
+        
+        if str(project_root) not in sys.path:
+            sys.path.insert(0, str(project_root))
+        
+        from src.v2.handlers.base_handler import BaseHandler
+        from src.v2.models import RawProduct
+        from src.v2.config_manager import ConfigManager
+        from src.v2.utils import (
+            get_logger,
+            extract_youtube_id,       # <-- Добавьте!
+            normalize_yes_no,         # <-- Добавьте!
+            parse_specifications      # <-- Добавьте!
+        )
 
 logger = get_logger(__name__)
+
+# Если parse_specifications всё равно не найдена, создайте локальную версию
+if 'parse_specifications' not in globals():
+    print("⚠️ parse_specifications не найдена, создаём локальную версию")
+    
+    def parse_specifications(specs_string: str) -> Dict[str, str]:
+        """Локальная версия парсера спецификаций"""
+        if not specs_string or not specs_string.strip():
+            return {}
+        
+        result = {}
+        try:
+            # Разные варианты разделителей
+            if ';' in specs_string:
+                pairs = specs_string.split(';')
+            elif ',' in specs_string:
+                pairs = specs_string.split(',')
+            else:
+                pairs = [specs_string]
+            
+            for pair in pairs:
+                pair = pair.strip()
+                if ':' in pair:
+                    key, value = pair.split(':', 1)
+                    result[key.strip()] = value.strip()
+                elif '=' in pair:
+                    key, value = pair.split('=', 1)
+                    result[key.strip()] = value.strip()
+        except Exception as e:
+            logger.warning(f"Ошибка парсинга спецификаций: {e}")
+        
+        return result
+
+# Если normalize_yes_no не найдена
+if 'normalize_yes_no' not in globals():
+    print("⚠️ normalize_yes_no не найдена, создаём локальную версию")
+    
+    def normalize_yes_no(value: str) -> str:
+        """Локальная версия нормализации Да/Нет"""
+        if not value:
+            return ""
+        
+        value_lower = value.lower().strip()
+        if value_lower in ['да', 'yes', 'true', '1']:
+            return "Да"
+        elif value_lower in ['нет', 'no', 'false', '0']:
+            return "Нет"
+        else:
+            return value
+
+# Если extract_youtube_id не найдена
+if 'extract_youtube_id' not in globals():
+    print("⚠️ extract_youtube_id не найдена, создаём локальную версию")
+    
+    def extract_youtube_id(url: str) -> Optional[str]:
+        """Локальная версия извлечения YouTube ID"""
+        if not url:
+            return None
+        
+        patterns = [
+            r'(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/v/)([a-zA-Z0-9_-]{11})',
+            r'(?:v=)([a-zA-Z0-9_-]{11})'
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1)
+        
+        return None
+
 
 
 class HtmlRepair:

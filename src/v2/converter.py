@@ -51,7 +51,7 @@ class ConverterV2:
             self.aggregator = Aggregator(self.config_manager)
             logger.info("Конфигурация загружена успешно")
         except Exception as e:
-            logger.error(f"Ошибка загрузки конфигурации: {e}")
+            logger.error(f"Ошибка загрузки конфигурации: {e}", exc_info=True)  
             raise
     
     def convert(self, input_path: str, output_path: Optional[str] = None, 
@@ -432,7 +432,7 @@ class ConverterV2:
                     row_data = cleaned_data  # Используем очищенную версию
                     
                     # ДИАГНОСТИКА: проверяем результат
-                    print(f"Продукт {i}/{len(woo_products)}:")
+                    # print(f"Продукт {i}/{len(woo_products)}:")
                     for field in ['post_content', 'post_title', 'post_excerpt']:
                         if field in row_data:
                             val = row_data[field]
@@ -440,9 +440,9 @@ class ConverterV2:
                                 contains_and = '&' in val
                                 contains_ndash = 'ndash' in val.lower()
                                 if contains_and or contains_ndash:
-                                    print(f"  ⚠️  {field}: содержит '&'? {contains_and}, содержит 'ndash'? {contains_ndash}")
+                                    # print(f"  ⚠️  {field}: содержит '&'? {contains_and}, содержит 'ndash'? {contains_ndash}")
                                     idx = val.find('&') if '&' in val else val.lower().find('ndash')
-                                    print(f"     Контекст: ...{repr(val[max(0, idx-30):idx+50])}...")
+                                    # print(f"     Контекст: ...{repr(val[max(0, idx-30):idx+50])}...")
                     
                     # Формируем строку для CSV
                     row = []

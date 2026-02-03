@@ -10,27 +10,35 @@ from typing import Dict, Any, List, Optional
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Добавляем пути к Python path
-current_file = Path(__file__).resolve()
-
-# 1. Путь к src (для utils)
-src_path = current_file.parent.parent  # src
-if str(src_path) not in sys.path:
-    sys.path.insert(0, str(src_path))
-
-# 2. Путь к src/v2 (для BaseHandler, RawProduct, ConfigManager)
-src_v2_path = src_path / "v2"  # src/v2
-if str(src_v2_path) not in sys.path:
-    sys.path.insert(0, str(src_v2_path))
+# Пробуем разные варианты импорта
+try:
+    # Вариант 1: относительный импорт (предпочтительный)
+    from .base_handler import BaseHandler
+except ImportError:
+    try:
+        # Вариант 2: абсолютный импорт
+        from src.v2.handlers.base_handler import BaseHandler
+    except ImportError:
+        # Вариант 3: прямой импорт (если файл в той же папке)
+        import sys
+        from pathlib import Path
+        
+        # Добавляем текущую директорию в sys.path
+        current_dir = Path(__file__).parent
+        if str(current_dir) not in sys.path:
+            sys.path.insert(0, str(current_dir))
+        
+        from base_handler import BaseHandler
 
 try:
-    # Импорты из src/v2
-    from handlers.base_handler import BaseHandler
-    from models import RawProduct
-    from config_manager import ConfigManager
+    # Импорты из src/v2 - используем относительные импорты
+    from ..models import RawProduct
+    from ..config_manager import ConfigManager
     
-    # Импорты из src/utils (теперь в sys.path)
-    from utils import (
+    print(f"✅ Основные импорты успешны")
+    
+    # Импорты из utils - используем относительные импорты
+    from ..utils import (
         get_logger,
         extract_youtube_id,
         is_valid_url,
@@ -49,33 +57,11 @@ try:
     
 except ImportError as e:
     print(f"❌ Ошибка импорта: {e}")
-    print(f"Текущий файл: {current_file}")
-    print(f"sys.path: {[p for p in sys.path if 'AlexZ' in str(p)]}")
-    
-    # Создаем минимальные заглушки для отладки
-    BaseHandler = type('BaseHandler', (), {})
-    RawProduct = type('RawProduct', (), {})
-    ConfigManager = type('ConfigManager', (), {'get_setting': lambda self, key, default=None: default})
-    
-    get_logger = lambda name: lambda msg: print(f"[{name}] {msg}")
-    ImageProcessor = None
-    FTPUploader = None
-    ImageStatusTracker = None
-    
-    # Заглушки для остального
-    extract_youtube_id = lambda x: None
-    is_valid_url = lambda x: bool(x)
-    generate_slug = lambda x: re.sub(r'[^\w\s-]', '', x).lower().replace(' ', '-')
-    split_image_urls = lambda x: [x.strip() for x in x.split(',') if x.strip()]
-    sanitize_filename = lambda x: re.sub(r'[<>:"/\\|?*]', '_', x)
-    download_file = lambda *args: None
-    get_file_extension_from_url = lambda x: x.split('.')[-1].lower() if '.' in x else 'jpg'
-    ensure_directory = lambda x: x.mkdir(parents=True, exist_ok=True)
+    print(f"Текущий файл: {__file__}")
+    raise
 
 # Создаем логгер
 logger = get_logger(__name__)
-
-
 
 class MediaHandler(BaseHandler):
     """
@@ -92,49 +78,176 @@ class MediaHandler(BaseHandler):
         """
         super().__init__(config_manager)
 
-
+        print(f"\n🔍 DEBUG MediaHandler.__init__:")
+        
+        # 1. Получаем все конфигурации ОДИН РАЗ
+        self.media_config = self.config_manager.get_setting('media', {}) if self.config_manager else {}
+        self.image_processing_config = self.config_manager.get_setting('image_processing', {}) if self.config_manager else {}
+        self.paths_config = self.config_manager.get_setting('paths', {}) if self.config_manager else {}
+        self.ftp_config = self.config_manager.get_setting('ftp', {}) if self.config_manager else {}
+        
+        print(f"   media_config: {self.media_config}")
+        print(f"   image_processing_config: {self.image_processing_config}")
+        print(f"   paths_config: {self.paths_config}")
+        print(f"   ftp_config: {self.ftp_config}")
+        
+        # 2. Настройки обработки изображений
+        # Если отдельной секции image_processing нет, создаем из media_config
+        if not self.image_processing_config:
+            print("⚠️ Секция 'image_processing' не найдена, создаем из media_config")
+            self.image_processing_config = {
+                'enabled': self.media_config.get('image_processing_enabled', True),
+                'quality': self.media_config.get('image_quality', 85),
+                'output_format': self.media_config.get('image_format', 'webp'),
+                'max_file_size_mb': self.media_config.get('max_image_size_mb', 1.0),
+                'delete_original': True,
+                'skip_processed': True
+            }
+        
+        self.image_processing_enabled = self.image_processing_config.get('enabled', True)
+        print(f"   image_processing_enabled: {self.image_processing_enabled}")
+        
+        # 3. Настройки загрузки
+        self.download_timeout = self.media_config.get('download_timeout', 
+                               self.media_config.get('timeout_seconds', 30))
+        self.max_retries = self.media_config.get('max_retries', 3)
+        self.max_workers = self.media_config.get('max_workers', 5)
+        
+        # 4. Пути к директориям (только один раз!)
+        self.download_dir = Path(
+            self.paths_config.get('local_image_download', 'data/downloads/images/')
+        )
+        self.converted_dir = Path(
+            self.paths_config.get('local_image_converted', 'data/downloads/converted/')
+        )
+        self.temp_dir = Path(self.media_config.get('temp_dir', 'temp/media'))
+        self.output_dir = Path(self.media_config.get('output_dir', 'output/media'))
+        
+        print(f"   download_dir: {self.download_dir}")
+        print(f"   converted_dir: {self.converted_dir}")
+        
+        # 5. Создаем директории
+        ensure_directory(self.download_dir)
+        ensure_directory(self.converted_dir)
+        ensure_directory(self.temp_dir)
+        ensure_directory(self.output_dir)
+        
+        # 6. Инициализируем утилиты (только один раз!)
+        self.image_processor = ImageProcessor(self.image_processing_config) if ImageProcessor else None
+        print(f"   image_processor создан: {self.image_processor}")
+        
+        # Для FTPUploader собираем полный конфиг
+        ftp_full_config = {
+            'ftp': self.ftp_config,
+            'paths': self.paths_config
+        }
+        self.ftp_uploader = FTPUploader(ftp_full_config) if FTPUploader else None
+        
+        self.status_tracker = ImageStatusTracker() if ImageStatusTracker else None
+        
+        # 7. Настройки FTP из .env
         import os
         from dotenv import load_dotenv
         
-        # Загружаем .env
         load_dotenv()
-
-        # Проверяем флаг из .env ИЛИ из settings.json
+        
+        # Проверяем флаг из .env ИЛИ из конфига
         ftp_enabled_env = os.getenv('FTP_ENABLED', 'false').lower() == 'true'
-        ftp_enabled_config = self.config_manager.get_setting('ftp.enabled', False)
+        ftp_enabled_config = self.ftp_config.get('enabled', False)
         
         self.ftp_upload_enabled = ftp_enabled_env or ftp_enabled_config
         
-        # Также проверяем наличие обязательных переменных
-        ftp_host = os.getenv('FTP_HOST')
-        ftp_username = os.getenv('FTP_USERNAME')
-        ftp_password = os.getenv('FTP_PASSWORD')
+        # Проверяем наличие обязательных переменных
+        ftp_host = os.getenv('FTP_HOST') or self.ftp_config.get('host')
+        ftp_username = os.getenv('FTP_USERNAME') or self.ftp_config.get('username')
+        ftp_password = os.getenv('FTP_PASSWORD') or self.ftp_config.get('password')
         
         if self.ftp_upload_enabled and (not ftp_host or not ftp_username or not ftp_password):
-            logger.warning("FTP включен, но отсутствуют обязательные переменные в .env")
-            logger.warning(f"FTP_HOST={bool(ftp_host)}, FTP_USERNAME={bool(ftp_username)}, FTP_PASSWORD={bool(ftp_password)}")
+            print("⚠️ FTP включен, но отсутствуют обязательные настройки")
             self.ftp_upload_enabled = False
         
-        logger.info(f"Настройки обработки: image_processing={self.image_processing_enabled}, "
-                   f"ftp_upload={self.ftp_upload_enabled} (из .env: {ftp_enabled_env})")
-
+        print(f"   ftp_upload_enabled: {self.ftp_upload_enabled}")
         
-        # Счетчик скачанных изображений
+        # 8. Счетчики
         self.downloaded_images = 0
         self.failed_downloads = 0
         
-        # Папка для скачивания изображений
-        self.download_dir = Path(self.config_manager.get_setting(
-            'paths.local_image_download', 
-            'data/downloads/images/'
-        ))
-        
-        # 🔧 ИСПРАВЛЕНО: Создаем сессию requests с заголовками браузера
+        # 9. Сессия requests
         self._init_requests_session()
         
-        # Создаем папку, если она не существует
-        ensure_directory(self.download_dir)
-
+        logger.info(f"MediaHandler инициализирован: "
+                   f"image_processing={self.image_processing_enabled}, "
+                   f"ftp_upload={self.ftp_upload_enabled}")
+        
+    def validate(self, data: Any) -> bool:
+        """
+        Валидация данных для обработки
+        
+        Args:
+            data: Данные для валидации
+            
+        Returns:
+            bool: True если данные валидны
+        """
+        if not data:
+            logger.warning("Пустые данные для обработки")
+            return False
+        
+        if isinstance(data, RawProduct):
+            # Проверяем наличие медиа в RawProduct
+            has_images = bool(data.images and data.images.strip())
+            has_video = bool(data.video_url and data.video_url.strip())
+            
+            if not (has_images or has_video):
+                logger.warning(f"RawProduct {data.product_name} не содержит медиа")
+                return False
+                
+        elif isinstance(data, str):
+            # Проверяем строку (URL или путь)
+            if not data.strip():
+                return False
+                
+        return True
+    
+    async def process_async(self, data: Any) -> Dict[str, Any]:
+        """
+        Асинхронная обработка медиа-контента
+        
+        Args:
+            data: Данные для обработки (RawProduct, URL, путь к файлу)
+            
+        Returns:
+            Dict с результатами обработки
+        """
+        import asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.process, data)
+    
+    def process(self, raw_product: RawProduct) -> Dict[str, Any]:
+        """
+        Обрабатывает медиа товара.
+        
+        Args:
+            raw_product: Сырые данные продукта
+            
+        Returns:
+            Словарь с полями images и ссылками на документы
+        """
+        result = {}
+        
+        # 1. Обрабатываем изображения
+        result.update(self._process_images(raw_product))
+        
+        # 2. Обрабатываем видео
+        result.update(self._process_video(raw_product))
+        
+        # 3. Обрабатываем документы
+        result.update(self._process_documents(raw_product))
+        
+        logger.debug(f"MediaHandler обработал продукт {raw_product.НС_код}: "
+                    f"{self.downloaded_images} изображений скачано")
+        return result
+    
     def _init_requests_session(self) -> None:
         """
         Инициализирует сессию requests с заголовками браузера.
@@ -155,7 +268,7 @@ class MediaHandler(BaseHandler):
         }
         
         self.session.headers.update(browser_headers)
-
+    
     def _transliterate_to_latin(self, text: str) -> str:
         """
         Транслитерирует кириллицу в латиницу.
@@ -196,37 +309,16 @@ class MediaHandler(BaseHandler):
         
         return ''.join(result)
     
-    def process(self, raw_product: RawProduct) -> Dict[str, Any]:
-        """
-        Обрабатывает медиа товара.
-        
-        Args:
-            raw_product: Сырые данные продукта
-            
-        Returns:
-            Словарь с полями images и ссылками на документы
-        """
-        result = {}
-        
-        # 1. Обрабатываем изображения
-
-        result.update(self._process_images(raw_product))
-        
-        # 2. Обрабатываем видео
-        result.update(self._process_video(raw_product))
-        
-        # 3. Обрабатываем документы
-        result.update(self._process_documents(raw_product))
-        
-        logger.debug(f"MediaHandler обработал продукт {raw_product.НС_код}: "
-                    f"{self.downloaded_images} изображений скачано")
-        return result
-    
     def _process_images(self, raw_product: RawProduct) -> Dict[str, Any]:
         """
         Обрабатывает изображения товара.
         Генерирует URL всегда, скачивает только если файла нет локально.
         """
+        print(f"\n🎨 DEBUG _process_images:")
+        print(f"   raw_product.НС_код: {raw_product.НС_код}")
+        print(f"   raw_product.Наименование: {raw_product.Наименование}")
+        print(f"   image_processing_enabled: {self.image_processing_enabled}")
+        
         result = {}
         
         if not hasattr(raw_product, 'Изображение') or not raw_product.Изображение:
@@ -244,6 +336,8 @@ class MediaHandler(BaseHandler):
         logger.debug(f"Начало обработки изображений для {raw_product.НС_код}: {len(image_urls)} URL")
         
         for idx, image_url in enumerate(image_urls):
+            print(f"\n   Обработка изображения {idx+1}: {image_url[:50]}...")
+            
             if not image_url:
                 continue
             
@@ -257,7 +351,24 @@ class MediaHandler(BaseHandler):
                 
                 # 2. Скачиваем только если нужно
                 if need_download:
-                    success = self._download_single_image_with_session(image_url, local_path)
+                    print(f"   🚀 Начинаем скачивание...")
+                    
+                    # Получаем параметры для обработки
+                    ns_code = self._get_clean_ns_code(raw_product.НС_код)
+                    slug = self._generate_slug_from_title(raw_product.Наименование or "")
+                    
+                    print(f"   ns_code: {ns_code}")
+                    print(f"   slug: {slug}")
+                    print(f"   idx: {idx}")
+                    
+                    success = self._download_single_image_with_session(
+                        image_url, 
+                        local_path,
+                        ns_code,      # передаем параметры
+                        slug,         # передаем параметры
+                        idx           # передаем параметры
+                    )
+                    
                     if success:
                         logger.info(f"Скачано новое изображение: {image_url} → {local_path}")
                     else:
@@ -286,22 +397,24 @@ class MediaHandler(BaseHandler):
             logger.warning(f"Не удалось обработать ни одного изображения для {raw_product.НС_код}")
         
         return result
-
     
     def _prepare_image_paths(self, image_url: str, raw_product: RawProduct, index: int) -> tuple[Path, str, bool]:
         """
         Подготавливает пути для изображения.
-        Сначала генерирует финальный URL, затем имя файла берётся из него.
-        Гарантирует идентичность имён в URL и локальной файловой системе.
         
         Args:
             image_url: Исходный URL изображения
-            raw_product: Объект RawProduct (нужен и НС-код, и название для slug)
+            raw_product: Объект RawProduct
             index: Индекс изображения (0-based)
             
         Returns:
             Кортеж: (локальный_путь, финальный_url, нужно_ли_скачивать)
         """
+        print(f"\n🔧 DEBUG _prepare_image_paths:")
+        print(f"   index: {index}")
+        print(f"   raw_product.НС_код: {raw_product.НС_код}")
+        print(f"   raw_product.Наименование: {raw_product.Наименование}")
+        
         # 1. Генерируем финальный URL
         final_url = self._generate_final_url(raw_product, index, image_url)
         
@@ -336,39 +449,21 @@ class MediaHandler(BaseHandler):
             )
         
         return local_path, final_url, need_download
-
-        
-        # # Отладка
-        # logger.debug(f"Генерация путей для {raw_product.НС_код}, изображение {index+1}")
-        # logger.debug(f"  Финальный URL: {final_url}")
-        # logger.debug(f"  Имя файла из URL: {url_filename}")
-        # logger.debug(f"  Локальный путь: {local_path}")
-        # logger.debug(f"  need_download: {need_download}")
-        
+    
     def _get_clean_ns_code(self, ns_code: str) -> str:
-            """
-            Очищает NS-код для использования в именах файлов.
-            """
-            if ns_code.startswith("НС-"):
-                return "ns-" + ns_code[3:]
-            elif ns_code.startswith("нс-"):
-                return "ns-" + ns_code[3:]
-            else:
-                return ns_code
-
-
+        """
+        Очищает NS-код для использования в именах файлов.
+        """
+        if ns_code.startswith("НС-"):
+            return "ns-" + ns_code[3:]
+        elif ns_code.startswith("нс-"):
+            return "ns-" + ns_code[3:]
+        else:
+            return ns_code
+    
     def _generate_final_url(self, raw_product: RawProduct, index: int, image_url: str = "") -> str:
         """
         Генерирует финальный URL для изображения.
-        Централизованная генерация - используется для создания и URL, и имени файла.
-        
-        Args:
-            raw_product: Объект RawProduct
-            index: Индекс изображения
-            image_url: Исходный URL (для определения расширения)
-            
-        Returns:
-            Финальный URL
         """
         # 1. Нормализуем НС-код (НС → ns)
         ns_code = raw_product.НС_код
@@ -395,17 +490,14 @@ class MediaHandler(BaseHandler):
             original_ext = 'jpg'
         
         # 4. Получаем шаблон URL из конфига
-        final_url_template = self.config_manager.get_setting(
-            'paths.final_image_url_template',
-            'https://kvanta42.ru/wp-content/uploads/2026/02/{ns_code}-{slug}-{index}.webp'            
-        )
-
-        # 5. ПРИНУДИТЕЛЬНО заменяем {ext} на .webp если есть
+        try:
+            final_url_template = self.config_manager.get_setting('paths.final_image_url_template')
+        except Exception:
+            final_url_template = 'uploads/{ns_code}-{slug}-{index}.webp'
+        
+        # 5. Заменяем {ext} на .webp если есть
         if '{ext}' in final_url_template:
-            # Вариант A: Простая замена
             final_url_template = final_url_template.replace('{ext}', 'webp')
-            logger.warning(f"Заменён {{ext}} на 'webp' в шаблоне")
-
         
         # 6. Заменяем плейсхолдеры
         final_url = final_url_template.format(
@@ -422,11 +514,15 @@ class MediaHandler(BaseHandler):
                                             index: int = 0) -> bool:
         """
         Скачивает одно изображение с использованием сессии.
-        ДОПОЛНЕНО: обработка и FTP загрузка после скачивания.
         
         Returns:
             True если успешно, False если ошибка
         """
+        print(f"\n📥 DEBUG _download_single_image_with_session:")
+        print(f"   URL: {image_url}")
+        print(f"   local_path: {local_path}")
+        print(f"   ns_code: {ns_code}, slug: {slug}, index: {index}")
+        
         try:
             # Настройки из конфига
             timeout = self.config_manager.get_setting('processing.image_timeout', 30)
@@ -454,16 +550,20 @@ class MediaHandler(BaseHandler):
                         local_path.unlink(missing_ok=True)
                         return False
                     
+                    print(f"✅ Изображение успешно скачано")
                     logger.debug(f"Успешно скачано: {image_url} → {local_path}")
                     
-                    # ⭐ НОВЫЙ КОД: Обработка и FTP загрузка после успешного скачивания
+                    # ⭐ Обработка и FTP загрузка после успешного скачивания
                     if ns_code and slug and index >= 0:
+                        print(f"🚀 Вызываем _process_and_upload_image...")
                         # Отмечаем как скачанный в трекере
                         if self.status_tracker:
                             self.status_tracker.mark_downloaded(ns_code, slug, index, local_path)
                         
                         # Обрабатываем и загружаем на FTP
                         self._process_and_upload_image(ns_code, slug, index, local_path)
+                    else:
+                        print(f"⚠️ Пропускаем обработку: не хватает данных (ns_code={ns_code}, slug={slug}, index={index})")
                     
                     return True
                     
@@ -488,19 +588,16 @@ class MediaHandler(BaseHandler):
                         return False
         
         except Exception as e:
+            print(f"❌ Исключение: {e}")
             logger.error(f"Неожиданная ошибка при скачивании {image_url}: {e}")
             return False
         
         return False
-
     
     def _process_and_upload_image(self, ns_code: str, slug: str, index: int, 
                                   downloaded_path: Path) -> Optional[Path]:
         """
         Обрабатывает скачанное изображение и загружает на FTP.
-        
-        Returns:
-            Path к обработанному файлу или None
         """
         if not downloaded_path.exists():
             logger.warning(f"Файл для обработки не найден: {downloaded_path}")
@@ -509,6 +606,12 @@ class MediaHandler(BaseHandler):
         processed_path = None
         
         # 1. ОБРАБОТКА ИЗОБРАЖЕНИЯ
+        print(f"\n🔍 ОТЛАДКА КОНВЕРТАЦИИ:")
+        print(f"   downloaded_path: {downloaded_path}")
+        print(f"   exists: {downloaded_path.exists()}")
+        print(f"   image_processing_enabled: {self.image_processing_enabled}")
+        print(f"   image_processor: {self.image_processor}")
+        
         if self.image_processing_enabled and self.image_processor:
             try:
                 # Проверяем, нужно ли обрабатывать (через трекер состояния)
@@ -518,9 +621,14 @@ class MediaHandler(BaseHandler):
                         ns_code, slug, index, downloaded_path
                     )
                 
+                print(f"   needs_processing: {needs_processing}")
+                
                 if needs_processing:
-                    logger.debug(f"Обрабатываем изображение: {downloaded_path.name}")
+                    print(f"   🚀 Начинаем обработку изображения...")
                     processed_path = self.image_processor.process_image(downloaded_path)
+                    
+                    print(f"   processed_path: {processed_path}")
+                    print(f"   processed_path exists: {processed_path.exists() if processed_path else False}")
                     
                     if processed_path and processed_path.exists():
                         # Отмечаем как обработанное
@@ -536,27 +644,36 @@ class MediaHandler(BaseHandler):
                         )
                         if delete_original:
                             downloaded_path.unlink(missing_ok=True)
-                            logger.debug(f"Удален оригинал: {downloaded_path.name}")
+                            print(f"   Удален оригинал: {downloaded_path.name}")
                     else:
-                        logger.warning(f"Обработка изображения не удалась: {downloaded_path}")
+                        print(f"   ⚠️ Обработка изображения не удалась!")
                         processed_path = downloaded_path  # Используем оригинал
                 else:
-                    logger.debug(f"Пропускаем обработку (уже обработано): {downloaded_path.name}")
+                    print(f"   ⏭️ Пропускаем обработку (уже обработано)")
                     processed_path = downloaded_path
                     
             except Exception as e:
+                print(f"   ❌ Ошибка обработки изображения: {e}")
                 logger.error(f"Ошибка обработки изображения {downloaded_path}: {e}")
                 processed_path = downloaded_path  # Возвращаем оригинал при ошибке
         else:
+            print(f"   ⏭️ Обработка отключена или нет процессора")
             processed_path = downloaded_path  # Без обработки
         
         # 2. ЗАГРУЗКА НА FTP
+        print(f"\n🔍 ОТЛАДКА FTP ЗАГРУЗКИ:")
+        print(f"   ftp_upload_enabled: {self.ftp_upload_enabled}")
+        print(f"   ftp_uploader: {self.ftp_uploader}")
+        print(f"   processed_path: {processed_path}")
+        
         if self.ftp_upload_enabled and self.ftp_uploader and processed_path:
             try:
                 # Проверяем, нужно ли загружать
                 needs_upload = True
                 if self.status_tracker:
                     needs_upload = self.status_tracker.needs_upload(ns_code, slug, index)
+                
+                print(f"   needs_upload: {needs_upload}")
                 
                 if needs_upload:
                     # Имя файла для FTP (всегда .webp для обработанных)
@@ -566,32 +683,29 @@ class MediaHandler(BaseHandler):
                         # Если не .webp, берем оригинальное расширение
                         remote_filename = processed_path.name
                     
-                    logger.debug(f"Загружаем на FTP: {processed_path.name} → {remote_filename}")
+                    print(f"   🚀 Загружаем на FTP: {processed_path.name} → {remote_filename}")
                     
                     success = self.ftp_uploader.upload_file(processed_path, remote_filename)
                     
-                    if success and self.status_tracker:
-                        self.status_tracker.mark_uploaded(ns_code, slug, index, processed_path)
-                        logger.debug(f"Файл загружен на FTP: {remote_filename}")
-                    elif not success:
-                        logger.warning(f"Не удалось загрузить на FTP: {processed_path.name}")
+                    if success:
+                        if self.status_tracker:
+                            self.status_tracker.mark_uploaded(ns_code, slug, index, processed_path)
+                        print(f"   ✅ Файл загружен на FTP: {remote_filename}")
+                    else:
+                        print(f"   ❌ Не удалось загрузить на FTP: {processed_path.name}")
                 else:
-                    logger.debug(f"Пропускаем FTP загрузку (уже загружено): {processed_path.name}")
+                    print(f"   ⏭️ Пропускаем FTP загрузку (уже загружено)")
                     
             except Exception as e:
+                print(f"   ❌ Ошибка FTP загрузки: {e}")
                 logger.error(f"Ошибка FTP загрузки {processed_path}: {e}")
         
-        return processed_path    
+        print(f"\n" + "="*50)
+        return processed_path
     
     def _generate_slug_from_title(self, title: str) -> str:
         """
         Генерирует slug из названия товара.
-        
-        Args:
-            title: Название товара
-            
-        Returns:
-            slug (латиница, нижний регистр, дефисы)
         """
         if not title:
             return "product"
@@ -606,7 +720,7 @@ class MediaHandler(BaseHandler):
             # Простая транслитерация и очистка
             import re
             
-            # Транслитерация кириллицы (можно использовать вашу функцию _transliterate_to_latin)
+            # Транслитерация кириллицы
             latin_text = self._transliterate_to_latin(title)
             
             # Заменяем всё, кроме букв, цифр и дефисов
@@ -624,12 +738,6 @@ class MediaHandler(BaseHandler):
     def _sanitize_filename(self, filename: str) -> str:
         """
         Очищает имя файла от небезопасных символов.
-        
-        Args:
-            filename: Исходное имя
-            
-        Returns:
-            Безопасное имя файла
         """
         # Убираем небезопасные символы для файловой системы
         import re
@@ -640,89 +748,10 @@ class MediaHandler(BaseHandler):
         safe = safe.strip('. ')
         # Ограничиваем длину
         return safe[:100]
-
- 
-    def _download_single_image(self, url: str, ns_code: str, slug: str, index: int) -> Optional[Path]:
-        """
-        Скачивает одно изображение с использованием сессии и заголовков браузера.
-        
-        Args:
-            url: URL изображения
-            ns_code: НС-код товара
-            slug: slug товара
-            index: индекс изображения (начиная с 1)
-            
-        Returns:
-            Путь к скачанному файлу или None при ошибке
-        """
-        try:
-            # Используем утилиту для определения расширения
-            ext = get_file_extension_from_url(url)
-            if not ext:
-                ext = 'jpg'
-            
-            # Создаем безопасное имя файла
-            safe_ns_code = sanitize_filename(ns_code)
-            safe_slug = sanitize_filename(slug)
-            
-            local_filename = f"{safe_ns_code}-{safe_slug}-{index}.{ext}"
-            local_path = self.download_dir / local_filename
-            
-            # 🔧 ИСПРАВЛЕНО: Используем сессию с заголовками браузера
-            timeout = self.config_manager.get_setting('processing.image_timeout', 30)
-            retries = self.config_manager.get_setting('processing.image_retries', 2)
-            
-            # Пытаемся скачать файл с использованием сессии
-            for attempt in range(retries):
-                try:
-                    response = self.session.get(url, timeout=timeout)
-                    response.raise_for_status()  # Проверяем статус (403, 404 и т.д.)
-                    
-                    # Сохраняем файл
-                    with open(local_path, 'wb') as f:
-                        f.write(response.content)
-                    
-                    self.downloaded_images += 1
-                    logger.debug(f"Скачано изображение: {local_filename}")
-                    return local_path
-                    
-                except requests.exceptions.HTTPError as e:
-                    if e.response.status_code == 403 and attempt < retries - 1:
-                        # 🔧 ИСПРАВЛЕНО: При 403 пробуем добавить Referer заголовок
-                        logger.debug(f"Попытка {attempt + 1}: 403 Forbidden для {url}, пробуем с Referer...")
-                        self.session.headers.update({"Referer": "https://www.google.com/"})
-                        time.sleep(2 ** attempt)  # Экспоненциальная задержка
-                        continue
-                    else:
-                        logger.warning(f"Не удалось скачать {url} (попытка {attempt + 1}): {e}")
-                        self.failed_downloads += 1
-                        return None
-                        
-                except requests.exceptions.RequestException as e:
-                    logger.warning(f"Ошибка сети для {url} (попытка {attempt + 1}): {e}")
-                    if attempt < retries - 1:
-                        time.sleep(2 ** attempt)  # Экспоненциальная задержка
-                    else:
-                        self.failed_downloads += 1
-                        return None
-            
-        except Exception as e:
-            self.failed_downloads += 1
-            logger.warning(f"Неожиданная ошибка при скачивании {url}: {e}")
-            return None
     
-
-
-
     def _process_video(self, raw_product: RawProduct) -> Dict[str, Any]:
         """
         Обрабатывает видео товара.
-        
-        Args:
-            raw_product: Сырые данные продукта
-            
-        Returns:
-            Словарь с полями meta:видео_url и meta:видео_превью
         """
         from ..utils.validators import safe_getattr
         
@@ -753,12 +782,6 @@ class MediaHandler(BaseHandler):
     def _process_documents(self, raw_product: RawProduct) -> Dict[str, Any]:
         """
         Обрабатывает документы товара.
-        
-        Args:
-            raw_product: Сырые данные продукта
-            
-        Returns:
-            Словарь с полями для документов
         """
         result = {}
         
@@ -802,3 +825,6 @@ class MediaHandler(BaseHandler):
         logger.info(f"MediaHandler: скачано {self.downloaded_images} изображений, "
                    f"ошибок: {self.failed_downloads}")
         super().cleanup()
+
+# УДАЛИТЕ эти функции из класса - они не нужны здесь
+# Они должны быть в отдельном тестовом файле

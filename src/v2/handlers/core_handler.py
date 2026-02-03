@@ -40,6 +40,8 @@ class CoreHandler(BaseHandler):
         
         # Счетчик для уникальных slug'ов
         self.slug_counter: Dict[str, int] = {}
+
+        
     
     def process(self, raw_product: RawProduct) -> Dict[str, Any]:
         """
