@@ -19,6 +19,10 @@ from .file_utils import (
     get_unique_filename
 )
 
+from .image_processor import ImageProcessor
+from .ftp_uploader import FTPUploader
+from .status_tracker import ImageStatusTracker
+
 __all__ = [
     # logger
     'setup_logging',
@@ -31,7 +35,6 @@ __all__ = [
     'normalize_yes_no',
     'generate_slug',
     'parse_specifications',
-    
     # file_utils
     'sanitize_filename',
     'download_file',
@@ -39,4 +42,10 @@ __all__ = [
     'ensure_directory',
     'split_image_urls',
     'get_unique_filename'
+
+    'get_unique_filename',
+    # новые модули
+    'ImageProcessor',
+    'FTPUploader', 
+    'ImageStatusTracker'
 ]

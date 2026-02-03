@@ -1,80 +1,45 @@
 """
 MediaHandler - обработчик медиа для B2B-WC Converter v2.0.
+Обрабатывает: изображения, видео, документы.
 """
 import os
 import re
 import requests
-import time
-import sys
+import time  # 🔧 ИСПРАВЛЕНО: Добавлен импорт для пауз
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from ..utils.validators import generate_slug
 
-# Добавляем пути к Python path
-current_file = Path(__file__).resolve()
-
-# 1. Путь к src (для utils)
-src_path = current_file.parent.parent  # src
-if str(src_path) not in sys.path:
-    sys.path.insert(0, str(src_path))
-
-# 2. Путь к src/v2 (для BaseHandler, RawProduct, ConfigManager)
-src_v2_path = src_path / "v2"  # src/v2
-if str(src_v2_path) not in sys.path:
-    sys.path.insert(0, str(src_v2_path))
-
+# Используем относительные импорты
 try:
-    # Импорты из src/v2
-    from handlers.base_handler import BaseHandler
-    from models import RawProduct
-    from config_manager import ConfigManager
-    
-    # Импорты из src/utils (теперь в sys.path)
-    from utils import (
-        get_logger,
-        extract_youtube_id,
-        is_valid_url,
-        generate_slug,
+    from .base_handler import BaseHandler
+    from ..models import RawProduct
+    from ..config_manager import ConfigManager
+    from ..utils.logger import get_logger
+    from ..utils.validators import extract_youtube_id, is_valid_url
+    from ..utils.file_utils import (
         split_image_urls,
         sanitize_filename,
         download_file,
         get_file_extension_from_url,
-        ensure_directory,
-        ImageProcessor,
-        FTPUploader,
-        ImageStatusTracker
+        ensure_directory
     )
-    
-    print(f"✅ Все импорты успешны")
-    
-except ImportError as e:
-    print(f"❌ Ошибка импорта: {e}")
-    print(f"Текущий файл: {current_file}")
-    print(f"sys.path: {[p for p in sys.path if 'AlexZ' in str(p)]}")
-    
-    # Создаем минимальные заглушки для отладки
-    BaseHandler = type('BaseHandler', (), {})
-    RawProduct = type('RawProduct', (), {})
-    ConfigManager = type('ConfigManager', (), {'get_setting': lambda self, key, default=None: default})
-    
-    get_logger = lambda name: lambda msg: print(f"[{name}] {msg}")
-    ImageProcessor = None
-    FTPUploader = None
-    ImageStatusTracker = None
-    
-    # Заглушки для остального
-    extract_youtube_id = lambda x: None
-    is_valid_url = lambda x: bool(x)
-    generate_slug = lambda x: re.sub(r'[^\w\s-]', '', x).lower().replace(' ', '-')
-    split_image_urls = lambda x: [x.strip() for x in x.split(',') if x.strip()]
-    sanitize_filename = lambda x: re.sub(r'[<>:"/\\|?*]', '_', x)
-    download_file = lambda *args: None
-    get_file_extension_from_url = lambda x: x.split('.')[-1].lower() if '.' in x else 'jpg'
-    ensure_directory = lambda x: x.mkdir(parents=True, exist_ok=True)
+except ImportError:
+    from base_handler import BaseHandler
+    from models import RawProduct
+    from config_manager import ConfigManager
+    from utils.logger import get_logger
+    from utils.validators import extract_youtube_id, is_valid_url
+    from utils.file_utils import (
+        split_image_urls,
+        sanitize_filename,
+        download_file,
+        get_file_extension_from_url,
+        ensure_directory
+    )
 
-# Создаем логгер
 logger = get_logger(__name__)
-
 
 
 class MediaHandler(BaseHandler):
@@ -91,33 +56,6 @@ class MediaHandler(BaseHandler):
             config_manager: Менеджер конфигураций
         """
         super().__init__(config_manager)
-
-
-        import os
-        from dotenv import load_dotenv
-        
-        # Загружаем .env
-        load_dotenv()
-
-        # Проверяем флаг из .env ИЛИ из settings.json
-        ftp_enabled_env = os.getenv('FTP_ENABLED', 'false').lower() == 'true'
-        ftp_enabled_config = self.config_manager.get_setting('ftp.enabled', False)
-        
-        self.ftp_upload_enabled = ftp_enabled_env or ftp_enabled_config
-        
-        # Также проверяем наличие обязательных переменных
-        ftp_host = os.getenv('FTP_HOST')
-        ftp_username = os.getenv('FTP_USERNAME')
-        ftp_password = os.getenv('FTP_PASSWORD')
-        
-        if self.ftp_upload_enabled and (not ftp_host or not ftp_username or not ftp_password):
-            logger.warning("FTP включен, но отсутствуют обязательные переменные в .env")
-            logger.warning(f"FTP_HOST={bool(ftp_host)}, FTP_USERNAME={bool(ftp_username)}, FTP_PASSWORD={bool(ftp_password)}")
-            self.ftp_upload_enabled = False
-        
-        logger.info(f"Настройки обработки: image_processing={self.image_processing_enabled}, "
-                   f"ftp_upload={self.ftp_upload_enabled} (из .env: {ftp_enabled_env})")
-
         
         # Счетчик скачанных изображений
         self.downloaded_images = 0
@@ -305,57 +243,29 @@ class MediaHandler(BaseHandler):
         # 1. Генерируем финальный URL
         final_url = self._generate_final_url(raw_product, index, image_url)
         
-        # 2. Извлекаем имя файла из URL
+        # 2. Извлекаем имя файла из URL (гарантирует совпадение!)
         import os
-        url_filename = os.path.basename(final_url)
+        url_filename = os.path.basename(final_url)  # "ns-1135450-sushilka-...-1.jpg"
         
-        # 3. Локальный путь (используем converted_dir если обработка включена)
-        if self.image_processing_enabled:
-            # Обработанные файлы сохраняем в converted_dir
-            download_dir = self.converted_dir
-            # Меняем расширение на .webp если обработка включена
-            if url_filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-                url_filename = os.path.splitext(url_filename)[0] + '.webp'
-        else:
-            # Без обработки - в обычную папку
-            download_dir = self.download_dir
-        
+        # 3. Локальный путь с ТЕМ ЖЕ именем файла
+        download_dir = Path(self.config_manager.get_setting(
+            'paths.local_image_download',
+            'data/downloads/images/'
+        ))
         download_dir.mkdir(parents=True, exist_ok=True)
         local_path = download_dir / url_filename
         
-        # 4. Проверяем, нужно ли скачивать (с учетом трекера состояния)
+        # 4. Проверяем, нужно ли скачивать
         need_download = not local_path.exists()
         
-        # Если есть трекер состояния, проверяем более точно
-        if not need_download and self.status_tracker:
-            ns_code_clean = self._get_clean_ns_code(raw_product.НС_код)
-            slug = self._generate_slug_from_title(raw_product.Наименование or "")
-            
-            need_download = self.status_tracker.needs_processing(
-                ns_code_clean, slug, index, local_path
-            )
+        # Отладка
+        logger.debug(f"Генерация путей для {raw_product.НС_код}, изображение {index+1}")
+        logger.debug(f"  Финальный URL: {final_url}")
+        logger.debug(f"  Имя файла из URL: {url_filename}")
+        logger.debug(f"  Локальный путь: {local_path}")
+        logger.debug(f"  need_download: {need_download}")
         
         return local_path, final_url, need_download
-
-        
-        # # Отладка
-        # logger.debug(f"Генерация путей для {raw_product.НС_код}, изображение {index+1}")
-        # logger.debug(f"  Финальный URL: {final_url}")
-        # logger.debug(f"  Имя файла из URL: {url_filename}")
-        # logger.debug(f"  Локальный путь: {local_path}")
-        # logger.debug(f"  need_download: {need_download}")
-        
-    def _get_clean_ns_code(self, ns_code: str) -> str:
-            """
-            Очищает NS-код для использования в именах файлов.
-            """
-            if ns_code.startswith("НС-"):
-                return "ns-" + ns_code[3:]
-            elif ns_code.startswith("нс-"):
-                return "ns-" + ns_code[3:]
-            else:
-                return ns_code
-
 
     def _generate_final_url(self, raw_product: RawProduct, index: int, image_url: str = "") -> str:
         """
@@ -417,13 +327,14 @@ class MediaHandler(BaseHandler):
         
         return final_url
     
-    def _download_single_image_with_session(self, image_url: str, local_path: Path,
-                                            ns_code: str = "", slug: str = "", 
-                                            index: int = 0) -> bool:
+    def _download_single_image_with_session(self, image_url: str, local_path: Path) -> bool:
         """
         Скачивает одно изображение с использованием сессии.
-        ДОПОЛНЕНО: обработка и FTP загрузка после скачивания.
         
+        Args:
+            image_url: URL изображения
+            local_path: Локальный путь для сохранения
+            
         Returns:
             True если успешно, False если ошибка
         """
@@ -455,16 +366,6 @@ class MediaHandler(BaseHandler):
                         return False
                     
                     logger.debug(f"Успешно скачано: {image_url} → {local_path}")
-                    
-                    # ⭐ НОВЫЙ КОД: Обработка и FTP загрузка после успешного скачивания
-                    if ns_code and slug and index >= 0:
-                        # Отмечаем как скачанный в трекере
-                        if self.status_tracker:
-                            self.status_tracker.mark_downloaded(ns_code, slug, index, local_path)
-                        
-                        # Обрабатываем и загружаем на FTP
-                        self._process_and_upload_image(ns_code, slug, index, local_path)
-                    
                     return True
                     
                 except requests.exceptions.HTTPError as e:
@@ -492,96 +393,6 @@ class MediaHandler(BaseHandler):
             return False
         
         return False
-
-    
-    def _process_and_upload_image(self, ns_code: str, slug: str, index: int, 
-                                  downloaded_path: Path) -> Optional[Path]:
-        """
-        Обрабатывает скачанное изображение и загружает на FTP.
-        
-        Returns:
-            Path к обработанному файлу или None
-        """
-        if not downloaded_path.exists():
-            logger.warning(f"Файл для обработки не найден: {downloaded_path}")
-            return None
-        
-        processed_path = None
-        
-        # 1. ОБРАБОТКА ИЗОБРАЖЕНИЯ
-        if self.image_processing_enabled and self.image_processor:
-            try:
-                # Проверяем, нужно ли обрабатывать (через трекер состояния)
-                needs_processing = True
-                if self.status_tracker:
-                    needs_processing = self.status_tracker.needs_processing(
-                        ns_code, slug, index, downloaded_path
-                    )
-                
-                if needs_processing:
-                    logger.debug(f"Обрабатываем изображение: {downloaded_path.name}")
-                    processed_path = self.image_processor.process_image(downloaded_path)
-                    
-                    if processed_path and processed_path.exists():
-                        # Отмечаем как обработанное
-                        if self.status_tracker:
-                            self.status_tracker.mark_processed(
-                                ns_code, slug, index, downloaded_path, processed_path
-                            )
-                        
-                        # Удаляем оригинал если настроено
-                        delete_original = self.config_manager.get_setting(
-                            'image_processing.delete_original', 
-                            True
-                        )
-                        if delete_original:
-                            downloaded_path.unlink(missing_ok=True)
-                            logger.debug(f"Удален оригинал: {downloaded_path.name}")
-                    else:
-                        logger.warning(f"Обработка изображения не удалась: {downloaded_path}")
-                        processed_path = downloaded_path  # Используем оригинал
-                else:
-                    logger.debug(f"Пропускаем обработку (уже обработано): {downloaded_path.name}")
-                    processed_path = downloaded_path
-                    
-            except Exception as e:
-                logger.error(f"Ошибка обработки изображения {downloaded_path}: {e}")
-                processed_path = downloaded_path  # Возвращаем оригинал при ошибке
-        else:
-            processed_path = downloaded_path  # Без обработки
-        
-        # 2. ЗАГРУЗКА НА FTP
-        if self.ftp_upload_enabled and self.ftp_uploader and processed_path:
-            try:
-                # Проверяем, нужно ли загружать
-                needs_upload = True
-                if self.status_tracker:
-                    needs_upload = self.status_tracker.needs_upload(ns_code, slug, index)
-                
-                if needs_upload:
-                    # Имя файла для FTP (всегда .webp для обработанных)
-                    if processed_path.suffix.lower() == '.webp':
-                        remote_filename = f"{ns_code}-{slug}-{index}.webp"
-                    else:
-                        # Если не .webp, берем оригинальное расширение
-                        remote_filename = processed_path.name
-                    
-                    logger.debug(f"Загружаем на FTP: {processed_path.name} → {remote_filename}")
-                    
-                    success = self.ftp_uploader.upload_file(processed_path, remote_filename)
-                    
-                    if success and self.status_tracker:
-                        self.status_tracker.mark_uploaded(ns_code, slug, index, processed_path)
-                        logger.debug(f"Файл загружен на FTP: {remote_filename}")
-                    elif not success:
-                        logger.warning(f"Не удалось загрузить на FTP: {processed_path.name}")
-                else:
-                    logger.debug(f"Пропускаем FTP загрузку (уже загружено): {processed_path.name}")
-                    
-            except Exception as e:
-                logger.error(f"Ошибка FTP загрузки {processed_path}: {e}")
-        
-        return processed_path    
     
     def _generate_slug_from_title(self, title: str) -> str:
         """
@@ -781,24 +592,8 @@ class MediaHandler(BaseHandler):
     
     def cleanup(self) -> None:
         """
-        Логирует статистику скачивания и обработки.
+        Логирует статистику скачивания.
         """
-        # Статистика из трекера если есть
-        if self.status_tracker:
-            try:
-                with open(self.status_tracker.status_file, 'r', encoding='utf-8') as f:
-                    import json
-                    data = json.load(f)
-                    total = len(data.get("images", {}))
-                    processed = sum(1 for img in data["images"].values() if img.get("processed"))
-                    uploaded = sum(1 for img in data["images"].values() if img.get("uploaded"))
-                    
-                    logger.info(f"📊 Статистика обработки изображений:")
-                    logger.info(f"   Всего: {total}, Обработано: {processed}, Загружено на FTP: {uploaded}")
-            except Exception as e:
-                logger.debug(f"Не удалось загрузить статистику: {e}")
-        
-        # Базовая статистика
         logger.info(f"MediaHandler: скачано {self.downloaded_images} изображений, "
                    f"ошибок: {self.failed_downloads}")
         super().cleanup()
