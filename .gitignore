@@ -26,6 +26,8 @@ wheels/
 venv/
 ENV/
 data/
+data/input/
+
 env.bak/
 venv.bak/
 # IDE
