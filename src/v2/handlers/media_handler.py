@@ -604,6 +604,7 @@ class MediaHandler(BaseHandler):
             return None
         
         processed_path = None
+        ftp_index = index + 1 
         
         # 1. ОБРАБОТКА ИЗОБРАЖЕНИЯ
         print(f"\n🔍 ОТЛАДКА КОНВЕРТАЦИИ:")
@@ -678,7 +679,7 @@ class MediaHandler(BaseHandler):
                 if needs_upload:
                     # Имя файла для FTP (всегда .webp для обработанных)
                     if processed_path.suffix.lower() == '.webp':
-                        remote_filename = f"{ns_code}-{slug}-{index}.webp"
+                        remote_filename = f"{ns_code}-{slug}-{ftp_index}.webp"
                     else:
                         # Если не .webp, берем оригинальное расширение
                         remote_filename = processed_path.name

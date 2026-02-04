@@ -67,10 +67,17 @@ class ConverterV2:
         Returns:
             Словарь с результатами конвертации
         """
+        
         input_file = Path(input_path)
         
         if not input_file.exists():
-            raise FileNotFoundError(f"Файл не найден: {input_file}")
+            # Пробуем найти в папке input из настроек
+            input_dir = Path(self.config_manager.get_setting('paths.input_catalog', 'data/input/'))
+            alternative_path = input_dir / input_path
+            if alternative_path.exists():
+                input_file = alternative_path
+            else:
+                raise FileNotFoundError(f"Файл не найден: {input_path}")
         
         # Создаем имя выходного файла
         if not output_path:

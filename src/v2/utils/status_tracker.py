@@ -45,7 +45,7 @@ class ImageStatusTracker:
     
     def get_image_status(self, ns_code: str, slug: str, index: int) -> Dict:
         """Получает статус конкретного изображения."""
-        key = f"{ns_code}-{slug}-{index}"
+        key = f"{ns_code}-{slug}-{index+1}"
         return self.status_data["images"].get(key, {
             "downloaded": False,
             "processed": False,
