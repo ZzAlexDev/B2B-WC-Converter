@@ -428,9 +428,11 @@ class ConverterV2:
                             from html import unescape
                             value = unescape(value)
                             value = value.replace('&ndash;', '-').replace('&ndash ', '- ')
+                            value = value.replace('&mdash;', '-').replace('&mdash ', '- ')
                             value = value.replace('&bull;', '•').replace('&bull ', '• ')
                             value = value.replace('&deg;', '°').replace('&deg ', '° ')
                             value = value.replace('&nbsp;', ' ')
+                            value = value.replace('—', '-')
                             value = value.replace('\xa0', ' ')
                             
                         

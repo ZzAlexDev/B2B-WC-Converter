@@ -87,25 +87,43 @@ class MediaHandler(BaseHandler):
         self.ftp_config = self.config_manager.get_setting('ftp', {}) if self.config_manager else {}
         
         print(f"   media_config: {self.media_config}")
-        print(f"   image_processing_config: {self.image_processing_config}")
+        print(f"   image_processing_config keys: {list(self.image_processing_config.keys()) if self.image_processing_config else 'EMPTY'}")
         print(f"   paths_config: {self.paths_config}")
         print(f"   ftp_config: {self.ftp_config}")
         
         # 2. Настройки обработки изображений
-        # Если отдельной секции image_processing нет, создаем из media_config
-        if not self.image_processing_config:
-            print("⚠️ Секция 'image_processing' не найдена, создаем из media_config")
+        # Проверяем, что секция image_processing существует И не пустая
+        if not self.image_processing_config or 'enabled' not in self.image_processing_config:
+            print(f"⚠️ Секция 'image_processing' не найдена или неполная: {self.image_processing_config}")
+            print("   Создаем из media_config с fallback значениями")
             self.image_processing_config = {
-                'enabled': self.media_config.get('image_processing_enabled', True),
-                'quality': self.media_config.get('image_quality', 85),
-                'output_format': self.media_config.get('image_format', 'webp'),
-                'max_file_size_mb': self.media_config.get('max_image_size_mb', 1.0),
-                'delete_original': True,
-                'skip_processed': True
+                'enabled': self.media_config.get('enabled', True),  # Используем 'enabled' из media, а не 'image_processing_enabled'
+                'quality': 85,
+                'output_format': 'webp',
+                'max_file_size_mb': 1.0,
+                'delete_original': False,
+                'skip_processed': False,
+                'target_width': 1000,
+                'target_height': 1000,
+                'add_noise': True,
+                'noise_level': 0.02,
+                'preserve_metadata': False,
+                'auto_orient': True
             }
         
+        # ТЕПЕРЬ безопасно получаем значения
         self.image_processing_enabled = self.image_processing_config.get('enabled', True)
-        print(f"   image_processing_enabled: {self.image_processing_enabled}")
+        
+        # ✅ ДОБАВЬТЕ ЭТИ ПЕРЕМЕННЫЕ:
+        self.skip_processed = self.image_processing_config.get('skip_processed', False)
+        self.delete_original = self.image_processing_config.get('delete_original', False)
+        
+        print(f"   ✅ image_processing_enabled: {self.image_processing_enabled}")
+        print(f"   ✅ skip_processed: {self.skip_processed}")
+        print(f"   ✅ delete_original: {self.delete_original}")
+        print(f"   ✅ Все настройки image_processing: {self.image_processing_config}")
+
+
         
         # 3. Настройки загрузки
         self.download_timeout = self.media_config.get('download_timeout', 
@@ -401,19 +419,11 @@ class MediaHandler(BaseHandler):
     def _prepare_image_paths(self, image_url: str, raw_product: RawProduct, index: int) -> tuple[Path, str, bool]:
         """
         Подготавливает пути для изображения.
-        
-        Args:
-            image_url: Исходный URL изображения
-            raw_product: Объект RawProduct
-            index: Индекс изображения (0-based)
-            
-        Returns:
-            Кортеж: (локальный_путь, финальный_url, нужно_ли_скачивать)
         """
         print(f"\n🔧 DEBUG _prepare_image_paths:")
         print(f"   index: {index}")
+        print(f"   skip_processed: {self.skip_processed}")  # ← ДОБАВЬТЕ ЭТУ СТРОКУ!
         print(f"   raw_product.НС_код: {raw_product.НС_код}")
-        print(f"   raw_product.Наименование: {raw_product.Наименование}")
         
         # 1. Генерируем финальный URL
         final_url = self._generate_final_url(raw_product, index, image_url)
@@ -422,32 +432,43 @@ class MediaHandler(BaseHandler):
         import os
         url_filename = os.path.basename(final_url)
         
-        # 3. Локальный путь (используем converted_dir если обработка включена)
+        # 3. Локальный путь
         if self.image_processing_enabled:
-            # Обработанные файлы сохраняем в converted_dir
             download_dir = self.converted_dir
-            # Меняем расширение на .webp если обработка включена
             if url_filename.lower().endswith(('.jpg', '.jpeg', '.png')):
                 url_filename = os.path.splitext(url_filename)[0] + '.webp'
         else:
-            # Без обработки - в обычную папку
             download_dir = self.download_dir
         
         download_dir.mkdir(parents=True, exist_ok=True)
         local_path = download_dir / url_filename
         
-        # 4. Проверяем, нужно ли скачивать (с учетом трекера состояния)
+        print(f"   local_path: {local_path}")
+        print(f"   exists: {local_path.exists()}")
+        
+        # 4. Проверяем, нужно ли скачивать
         need_download = not local_path.exists()
         
-        # Если есть трекер состояния, проверяем более точно
-        if not need_download and self.status_tracker:
-            ns_code_clean = self._get_clean_ns_code(raw_product.НС_код)
-            slug = self._generate_slug_from_title(raw_product.Наименование or "")
+        # ВАЖНОЕ ИСПРАВЛЕНИЕ ↓
+        if not need_download:
+            # Файл уже существует
             
-            need_download = self.status_tracker.needs_processing(
-                ns_code_clean, slug, index, local_path
-            )
+            # ПЕРВОЕ: проверяем skip_processed
+            if self.skip_processed:
+                print(f"   ⏭️ skip_processed=True, пропускаем существующий файл")
+                return local_path, final_url, False  # need_download = False
+            
+            # ВТОРОЕ: только если skip_processed=False, проверяем status_tracker
+            if self.status_tracker:
+                ns_code_clean = self._get_clean_ns_code(raw_product.НС_код)
+                slug = self._generate_slug_from_title(raw_product.Наименование or "")
+                
+                need_download = self.status_tracker.needs_processing(
+                    ns_code_clean, slug, index, local_path
+                )
+                print(f"   status_tracker.needs_processing: {need_download}")
         
+        print(f"   need_download: {need_download}")
         return local_path, final_url, need_download
     
     def _get_clean_ns_code(self, ns_code: str) -> str:
@@ -611,6 +632,7 @@ class MediaHandler(BaseHandler):
         print(f"   downloaded_path: {downloaded_path}")
         print(f"   exists: {downloaded_path.exists()}")
         print(f"   image_processing_enabled: {self.image_processing_enabled}")
+        print(f"   image_processor: {self.image_processor}")
         print(f"   image_processor: {self.image_processor}")
         
         if self.image_processing_enabled and self.image_processor:
