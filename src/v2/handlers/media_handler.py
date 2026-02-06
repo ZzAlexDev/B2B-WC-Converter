@@ -627,17 +627,36 @@ class MediaHandler(BaseHandler):
         processed_path = None
         ftp_index = index + 1 
         
+        # ДИАГНОСТИКА: собираем информацию о файле перед обработкой
+        print(f"\n📊 ДИАГНОСТИКА ИЗОБРАЖЕНИЯ {index+1}:")
+        print(f"   Файл: {downloaded_path.name}")
+        print(f"   Размер: {downloaded_path.stat().st_size / 1024:.1f} KB")
+        
+        # Проверяем размер изображения
+        try:
+            from PIL import Image
+            with Image.open(downloaded_path) as img:
+                original_size = img.size
+                print(f"   Исходный размер: {original_size[0]}x{original_size[1]}")
+                print(f"   Формат: {img.format}")
+        except Exception as e:
+            print(f"   ❌ Не удалось прочитать размер: {e}")
+            original_size = (0, 0)
+        
         # 1. ОБРАБОТКА ИЗОБРАЖЕНИЯ
-        print(f"\n🔍 ОТЛАДКА КОНВЕРТАЦИИ:")
-        print(f"   downloaded_path: {downloaded_path}")
-        print(f"   exists: {downloaded_path.exists()}")
+        print(f"\n🔧 ПАРАМЕТРЫ ОБРАБОТКИ:")
         print(f"   image_processing_enabled: {self.image_processing_enabled}")
         print(f"   image_processor: {self.image_processor}")
-        print(f"   image_processor: {self.image_processor}")
+        
+        # Получаем target размеры для проверки
+        target_width = self.image_processing_config.get('target_width', 1000)
+        target_height = self.image_processing_config.get('target_height', 1000)
+        print(f"   target_size: {target_width}x{target_height}")
+        print(f"   skip_processed: {self.skip_processed}")
         
         if self.image_processing_enabled and self.image_processor:
             try:
-                # Проверяем, нужно ли обрабатывать (через трекер состояния)
+                # Проверяем, нужно ли обрабатывать
                 needs_processing = True
                 if self.status_tracker:
                     needs_processing = self.status_tracker.needs_processing(
@@ -648,12 +667,35 @@ class MediaHandler(BaseHandler):
                 
                 if needs_processing:
                     print(f"   🚀 Начинаем обработку изображения...")
+                    
+                    # Выводим настройки обработки
+                    print(f"   Качество: {self.image_processing_config.get('quality', 85)}")
+                    print(f"   Формат: {self.image_processing_config.get('output_format', 'webp')}")
+                    print(f"   Сохранять метаданные: {self.image_processing_config.get('preserve_metadata', False)}")
+                    print(f"   Автоориентация: {self.image_processing_config.get('auto_orient', True)}")
+                    
+                    # Вызываем обработку с диагностикой
                     processed_path = self.image_processor.process_image(downloaded_path)
                     
-                    print(f"   processed_path: {processed_path}")
-                    print(f"   processed_path exists: {processed_path.exists() if processed_path else False}")
+                    print(f"   Результат обработки: {processed_path}")
                     
                     if processed_path and processed_path.exists():
+                        # Проверяем результат
+                        try:
+                            with Image.open(processed_path) as img:
+                                processed_size = img.size
+                                print(f"   ✅ Обработанный размер: {processed_size[0]}x{processed_size[1]}")
+                                
+                                # Проверяем, изменился ли размер
+                                if original_size[0] > 0 and processed_size[0] > 0:
+                                    if processed_size[0] != target_width and processed_size[1] != target_height:
+                                        print(f"   ⚠️  Размер НЕ соответствует target!")
+                                        print(f"      Исходный: {original_size[0]}x{original_size[1]}")
+                                        print(f"      Обработанный: {processed_size[0]}x{processed_size[1]}")
+                                        print(f"      Target: {target_width}x{target_height}")
+                        except Exception as e:
+                            print(f"   ❌ Не удалось проверить обработанный файл: {e}")
+                        
                         # Отмечаем как обработанное
                         if self.status_tracker:
                             self.status_tracker.mark_processed(
@@ -661,27 +703,29 @@ class MediaHandler(BaseHandler):
                             )
                         
                         # Удаляем оригинал если настроено
-                        delete_original = self.config_manager.get_setting(
-                            'image_processing.delete_original', 
-                            True
-                        )
-                        if delete_original:
-                            downloaded_path.unlink(missing_ok=True)
-                            print(f"   Удален оригинал: {downloaded_path.name}")
+                        if self.delete_original:
+                            try:
+                                downloaded_path.unlink(missing_ok=True)
+                                print(f"   🗑️ Удален оригинал: {downloaded_path.name}")
+                            except Exception as e:
+                                print(f"   ⚠️ Не удалось удалить оригинал: {e}")
                     else:
                         print(f"   ⚠️ Обработка изображения не удалась!")
-                        processed_path = downloaded_path  # Используем оригинал
+                        processed_path = downloaded_path
                 else:
                     print(f"   ⏭️ Пропускаем обработку (уже обработано)")
                     processed_path = downloaded_path
                     
             except Exception as e:
                 print(f"   ❌ Ошибка обработки изображения: {e}")
+                import traceback
+                traceback.print_exc()
                 logger.error(f"Ошибка обработки изображения {downloaded_path}: {e}")
-                processed_path = downloaded_path  # Возвращаем оригинал при ошибке
+                processed_path = downloaded_path
         else:
             print(f"   ⏭️ Обработка отключена или нет процессора")
-            processed_path = downloaded_path  # Без обработки
+            processed_path = downloaded_path
+
         
         # 2. ЗАГРУЗКА НА FTP
         print(f"\n🔍 ОТЛАДКА FTP ЗАГРУЗКИ:")
