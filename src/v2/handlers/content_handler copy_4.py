@@ -3,15 +3,9 @@ ContentHandler - обработчик контента для B2B-WC Converter v
 """
 import re
 import sys
-import json
-import time
-import random
-import os
-from openai import OpenAI
-from dotenv import load_dotenv
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Union, Callable
-from urllib.parse import urlparse
+from urllib.parse import urlparse  # <-- Добавьте этот импорт!
 
 # Пробуем импортировать
 try:
@@ -21,9 +15,9 @@ try:
     from ..config_manager import ConfigManager
     from ..utils import (
         get_logger,
-        extract_youtube_id,
-        normalize_yes_no,
-        parse_specifications
+        extract_youtube_id,           # <-- Добавьте!
+        normalize_yes_no,             # <-- Добавьте!
+        parse_specifications          # <-- Добавьте!
     )
 except ImportError as e:
     print(f"❌ Ошибка импорта в ContentHandler (вариант 1): {e}")
@@ -34,9 +28,9 @@ except ImportError as e:
         from src.v2.config_manager import ConfigManager
         from src.v2.utils import (
             get_logger,
-            extract_youtube_id,
-            normalize_yes_no,
-            parse_specifications
+            extract_youtube_id,       # <-- Добавьте!
+            normalize_yes_no,         # <-- Добавьте!
+            parse_specifications      # <-- Добавьте!
         )
     except ImportError as e:
         print(f"❌ Ошибка импорта в ContentHandler (вариант 2): {e}")
@@ -52,13 +46,12 @@ except ImportError as e:
         from src.v2.config_manager import ConfigManager
         from src.v2.utils import (
             get_logger,
-            extract_youtube_id,
-            normalize_yes_no,
-            parse_specifications
+            extract_youtube_id,       # <-- Добавьте!
+            normalize_yes_no,         # <-- Добавьте!
+            parse_specifications      # <-- Добавьте!
         )
 
 logger = get_logger(__name__)
-load_dotenv()
 
 # Если parse_specifications всё равно не найдена, создайте локальную версию
 if 'parse_specifications' not in globals():
@@ -131,322 +124,6 @@ if 'extract_youtube_id' not in globals():
         return None
 
 
-class DeepSeekGenerator:
-    """Генератор SEO-текстов через DeepSeek API"""
-    
-    def __init__(self):
-        self.api_key = os.getenv('DEEPSEEK_API_KEY')
-        self.base_url = os.getenv('DEEPSEEK_BASE_URL', 'https://api.deepseek.com/v1')
-        self.model = os.getenv('DEEPSEEK_MODEL', 'stepfun/step-3.5-flash:free')
-        self.temperature = float(os.getenv('SEO_AI_TEMPERATURE', '0.7'))
-        self.max_tokens = int(os.getenv('SEO_AI_MAX_TOKENS', '1000'))
-        self.enabled = os.getenv('SEO_AI_ENABLED', 'false').lower() == 'true'
-        self.timeout = int(os.getenv('SEO_AI_TIMEOUT', '60'))
-        self.max_retries = int(os.getenv('SEO_AI_MAX_RETRIES', '5'))
-        self.base_delay = int(os.getenv('SEO_AI_BASE_DELAY', '2'))
-        
-        if self.enabled and self.api_key:
-            self.client = OpenAI(
-                api_key=self.api_key,
-                base_url=self.base_url,
-                timeout=self.timeout
-            )
-            print(f"✅ AI инициализирован (модель: {self.model})")
-        else:
-            self.client = None
-            if self.enabled:
-                print("⚠️ AI отключен: нет API ключа")
-    
-    def generate_both(self, product_name: str, brand: str = "") -> tuple[str, str]:
-        """
-        Генерирует и intro и outro в одном запросе.
-        Возвращает (intro, outro)
-        """
-        if not self.client:
-            return "", ""
-        
-        # Базовая задержка перед запросом (чтобы не нагружать API)
-        time.sleep(random.uniform(0.5, 1.5))
-        
-        prompt = f"""
-        Напиши два текста для товара.
-        
-        Товар: {product_name}
-        Бренд: {brand if brand else 'не указан'}
-        
-        Текст 1 (SEO-вступление в начале):
-        - 3-5 предложений (максимум 500 символов)
-        - Уникально, информативно
-        - Без рекламных призывов
-        - На русском языке
-        
-        Текст 2 (призыв к действию в конце):
-        - 3-5 предложений (максимум 500 символов)
-        - Естественно, без навязчивости
-        - Упомянуть возможность доставки, монтажа и консультации
-        - Упомянуть тип оборудования
-        - Упомянуть нашу компанию, менеджеров
-        - На русском языке
-        
-        ОТВЕТ ДАЙ В ФОРМАТЕ:
-        INTRO: [текст вступления]
-        OUTRO: [текст призыва]
-
-        ❗️ВАЖНО: Каждый текст должен быть ПОЛНЫМ предложением!
-        """
-        
-        print(f"\n{'='*60}")
-        print(f"🤖 ЗАПРОС К AI ДЛЯ ТОВАРА:")
-        print(f"📦 Товар: {product_name}")
-        print(f"🏷️ Бренд: {brand if brand else 'не указан'}")
-        print(f"{'='*60}")
-        
-        # Расширенный список моделей для fallback
-        fallback_models = [
-            self.model,
-            "stepfun/step-3.5-flash:free",
-            "deepseek/deepseek-r1-0528:free",
-            "z-ai/glm-4.5-air:free",
-            "qwen/qwen3-235b-a22b-thinking:free",
-            "arcee-ai/trinity-large-preview:free",
-            "nvidia/nemotron-3-nano-30b-a3b:free",
-            "google/gemma-3-27b-it:free",
-            "meta-llama/llama-3.3-70b-instruct:free",
-            "xiaomi/mimo-v2-flash:free",
-            "mistralai/devstral-2-2512:free",
-            "openai/gpt-oss-120b:free",
-            "qwen/qwen3-vl-235b-a22b-thinking:free",
-            "arcee-ai/trinity-mini:free",
-            "nvidia/nemotron-nano-2-vl:free",
-            "qwen/qwen3-vl-30b-a3b-thinking:free",
-            "nvidia/nemotron-nano-9b-v2:free",
-            "openai/gpt-oss-20b:free",
-            "upstage/solar-pro-3:free",
-            "moonshotai/kimi-k2-5:free",
-            "nex-agi/deepseek-v3.1-nex-n1:free",
-            "google/gemma-3-12b-it:free",
-            "google/gemma-3-4b-it:free",
-            "meta-llama/llama-4-maverick:free",
-            "meta-llama/llama-4-scout:free",
-            "moonshotai/kimi-vl-a3b-thinking:free",
-            "bytedance/seed-1-6:free",
-            "minimax/m2-1:free",
-            "allenai/olmo-3.1-32b-think:free",
-            "z-ai/glm-4-7:free",
-            "qwen/qwen3-5-plus:free"
-        ]
-        
-        for model in fallback_models:
-            for attempt in range(self.max_retries):
-                try:
-                    print(f"\n🔄 Пробую модель: {model} (попытка {attempt+1}/{self.max_retries})")
-                    
-                    response = self.client.chat.completions.create(
-                        model=model,
-                        messages=[
-                            {"role": "system", "content": "Ты SEO-копирайтер. Отвечай строго в указанном формате."},
-                            {"role": "user", "content": prompt}
-                        ],
-                        temperature=self.temperature,
-                        max_tokens=self.max_tokens,
-                        timeout=self.timeout
-                    )
-                    
-                    text = response.choices[0].message.content.strip()
-                    
-                    print(f"\n📥 СЫРОЙ ОТВЕТ AI:")
-                    print(f"{text if text else '⚠️ ПУСТОЙ ОТВЕТ'}")
-                    print(f"\n{'─'*40}")
-                    
-                    # 🛡️ ПРОВЕРКА НА ПУСТОЙ ОТВЕТ
-                    if not text:
-                        print("⚠️ AI вернул пустой ответ, пробую снова...")
-                        continue
-                    
-                    # Парсим ответ
-                    intro = ""
-                    outro = ""
-                    
-                    for line in text.split('\n'):
-                        if line.startswith('INTRO:'):
-                            intro = line.replace('INTRO:', '').strip()
-                        elif line.startswith('OUTRO:'):
-                            outro = line.replace('OUTRO:', '').strip()
-                    
-                    # Если не нашли в формате, пробуем разделить по пустой строке
-                    if not intro or not outro:
-                        parts = text.split('\n\n')
-                        if len(parts) >= 2:
-                            intro = parts[0].strip()
-                            outro = parts[1].strip()
-                    
-                    # 🛡️ ПРОВЕРКА НА ОБРЫВ
-                    def is_truncated(text: str) -> bool:
-                        """Проверяет, оборван ли текст"""
-                        if not text:
-                            return False
-                        last_char = text.strip()[-1]
-                        return last_char not in '.!?…'
-                    
-                    if intro and is_truncated(intro):
-                        print(f"⚠️ Вступление оборвано, добавляю '...'")
-                        intro = intro.rstrip() + "…"
-                    
-                    if outro and is_truncated(outro):
-                        print(f"⚠️ Призыв оборван, добавляю '...'")
-                        outro = outro.rstrip() + "…"
-                    
-                    # 🎯 ВЫВОД РЕЗУЛЬТАТА
-                    print(f"\n{'*'*10} РЕЗУЛЬТАТ {'*'*10}")
-                    print(f"📌 INTRO:  {intro}")
-                    print(f"📌 OUTRO:  {outro}")
-                    print(f"{'*'*30}\n")                            
-                    
-                    if intro and outro:
-                        return (
-                            f'<p class="seo-intro">{intro}</p>',
-                            f'<p class="seo-outro">{outro}</p>'
-                        )
-                    else:
-                        print("⚠️ Не удалось распарсить ответ, пробую снова...")
-                        continue
-                    
-                except Exception as e:
-                    if "429" in str(e):
-                        # Экспоненциальная задержка с джиттером
-                        wait_time = (self.base_delay ** attempt) + random.uniform(0, 1)
-                        print(f"⚠️ Модель {model} перегружена, жду {wait_time:.1f}с... (попытка {attempt+1}/{self.max_retries})")
-                        time.sleep(wait_time)
-                    else:
-                        print(f"❌ Ошибка с моделью {model}: {e}")
-                        break  # Переходим к следующей модели
-        
-        print("⚠️ Не удалось получить ответ от AI")
-        return "", ""
-    
-    def generate_intro(self, product_name: str, brand: str = "") -> str:
-        intro, _ = self.generate_both(product_name, brand)
-        return intro
-    
-    def generate_outro(self, product_name: str, brand: str = "") -> str:
-        _, outro = self.generate_both(product_name, brand)
-        return outro
-
-
-class SimpleSEOGenerator:
-    """Простой генератор SEO-текстов из JSON"""
-    
-    def __init__(self, json_path: str = "seo_templates.json"):
-        self.templates = self._load_templates(json_path)
-        self.generated_cache = {}  # Кэш для сгенерированных текстов
-        
-    def _load_templates(self, json_path: str) -> dict:
-        """Загружает шаблоны из JSON"""
-        try:
-            # Ищем файл в разных местах
-            possible_paths = [
-                Path(json_path),
-                Path(__file__).parent / json_path,
-                Path(__file__).parent.parent / json_path,
-                Path.cwd() / json_path,
-                Path.cwd() / "config" / json_path
-            ]
-            
-            for path in possible_paths:
-                if path.exists():
-                    print(f"✅ Загружен SEO шаблон из: {path}")
-                    with open(path, 'r', encoding='utf-8') as f:
-                        return json.load(f)
-            
-            # Если файл не найден, возвращаем запасные шаблоны
-            print(f"⚠️ Файл {json_path} не найден, использую встроенные шаблоны")
-            return self._get_default_templates()
-            
-        except Exception as e:
-            print(f"❌ Ошибка загрузки SEO шаблонов: {e}")
-            return self._get_default_templates()
-    
-    def _get_default_templates(self) -> dict:
-        """Возвращает шаблоны по умолчанию"""
-        return {
-            "intro": [
-                "Купить {name} по выгодной цене",
-                "Оригинальный {name} в наличии",
-                "{name} – лучшее решение для ваших задач",
-                "Продажа {name} с доставкой",
-                "Хотите купить {name}? Звоните!"
-            ],
-            "outro": [
-                "Звоните! Доставка по всей России",
-                "Оставьте заявку – получите консультацию",
-                "Гарантия лучшей цены на {name}",
-                "Спешите купить {name} по акции",
-                "Лучшее предложение на рынке!"
-            ],
-            "variators": {
-                "купить": ["приобрести", "заказать", "оформить"],
-                "доставка": ["отправка", "пересылка", "транспортировка"],
-                "цена": ["стоимость", "прайс", "ценовое предложение"],
-                "гарантия": ["гарантийный срок", "обслуживание", "поддержка"]
-            }
-        }
-    
-    def generate_intro(self, product_name: str, brand: str = "", product_id: str = "") -> str:
-        """Генерирует вступление"""
-        cache_key = f"intro_{product_id}_{product_name[:20]}"
-        
-        # Проверяем кэш
-        if cache_key in self.generated_cache:
-            return self.generated_cache[cache_key]
-        
-        templates = self.templates.get('intro', ["{name}"])
-        template = random.choice(templates)
-        
-        # Заменяем переменные
-        text = template.replace('{name}', product_name)
-        text = text.replace('{brand}', brand or product_name.split()[0] if product_name else "")
-        
-        # Применяем вариаторы
-        text = self._apply_variators(text)
-        
-        result = f'<p class="seo-intro">{text}</p>'
-        
-        # Сохраняем в кэш
-        self.generated_cache[cache_key] = result
-        return result
-    
-    def generate_outro(self, product_name: str, product_id: str = "") -> str:
-        """Генерирует заключение"""
-        cache_key = f"outro_{product_id}_{product_name[:20]}"
-        
-        # Проверяем кэш
-        if cache_key in self.generated_cache:
-            return self.generated_cache[cache_key]
-        
-        templates = self.templates.get('outro', ["Звоните!"])
-        template = random.choice(templates)
-        
-        text = template.replace('{name}', product_name)
-        text = self._apply_variators(text)
-        
-        result = f'<p class="seo-outro">{text}</p>'
-        
-        # Сохраняем в кэш
-        self.generated_cache[cache_key] = result
-        return result
-    
-    def _apply_variators(self, text: str) -> str:
-        """Применяет вариаторы (синонимы)"""
-        variators = self.templates.get('variators', {})
-        
-        for word, variants in variators.items():
-            if word in text and variants:
-                # С вероятностью 70% заменяем слово на синоним
-                if random.random() < 0.7:
-                    text = text.replace(word, random.choice(variants), 1)
-        
-        return text
-
 
 class HtmlRepair:
     """Класс для ремонта поврежденного HTML."""
@@ -484,17 +161,12 @@ class HtmlRepair:
         html = html.replace('&ndash;', '-')
         html = html.replace('\xa0', ' ')
 
-        # 4. Исправляем битые теги
+        # 4. Исправляем битые теги и <br> (как у вас)
         html = html.replace('</\x01>', '</ul>')
         html = re.sub(r'</p>\s*<br\s*/?\s*>\s*<h', '</p>\n<h', html, flags=re.IGNORECASE)
-        html = re.sub(r'<h([1-6])[^>]*>(.*?)</h\[1-6\]>', r'<h\1>\2</h\1>', html, flags=re.IGNORECASE)
-        html = re.sub(r'<ul>\s*<br\s*/?\s*>', '<ul>\n', html, flags=re.IGNORECASE)
-        html = re.sub(r'</li>\s*<br\s*/?\s*>\s*<li>', '</li>\n<li>', html, flags=re.IGNORECASE)
-        
-        # 5. Исправляем двойные кавычки в class
-        html = re.sub(r'class=""([^""]+)""', r'class="\1"', html)
+        # ... остальные исправления тегов
 
-        # 6. Финальная чистка
+        # 5. Финальная чистка
         html = re.sub(r'\s+', ' ', html)
         html = re.sub(r'>\s+<', '><', html)
         return html.strip()
@@ -511,6 +183,10 @@ class HtmlRepair:
         
         # Убираем лишние пробелы
         text = re.sub(r'\s+', ' ', text).strip()
+        
+
+
+        
         
         return text
 
@@ -543,23 +219,6 @@ class ContentHandler(BaseHandler):
             ("Промоматериалы", "промо-материал", "promo-material"),
             ("Инструкции", "инструкция", "instruction")
         ]
-        
-        # ⭐ Инициализируем оба генератора
-        try:
-            # AI генератор
-            self.ai_generator = DeepSeekGenerator()
-            
-            # Шаблонный генератор (всегда нужен как fallback)
-            seo_json_path = self.config_manager.get_setting('seo.json_path', 'seo_templates.json')
-            self.template_generator = SimpleSEOGenerator(seo_json_path)
-            
-            print(f"🤖 AI-генератор: {'ВКЛЮЧЕН' if self.ai_generator.enabled else 'ВЫКЛЮЧЕН'}")
-            print(f"📝 Шаблонный генератор: ВКЛЮЧЕН")
-            
-        except Exception as e:
-            print(f"⚠️ Ошибка инициализации генераторов: {e}")
-            self.ai_generator = None
-            self.template_generator = None
     
     def process(self, raw_product: RawProduct) -> Dict[str, Any]:
         """
@@ -605,9 +264,10 @@ class ContentHandler(BaseHandler):
             clean_key = self.html_repair.clean_text(key).strip()
             clean_value = self.html_repair.clean_text(value).strip()
 
-            # ЗАМЕНЯЕМ | на / в КЛЮЧЕ и ЗНАЧЕНИИ
+            # 2. ЗАМЕНЯЕМ | на / в КЛЮЧЕ и ЗНАЧЕНИИ
             clean_key = clean_key.replace('|', '/')
             clean_value = clean_value.replace('|', '/')
+
             
             if clean_key and clean_value:
                 normalized_value = normalize_yes_no(clean_value)
@@ -619,48 +279,9 @@ class ContentHandler(BaseHandler):
     def _build_html_content(self, raw_product: RawProduct, specs: Dict[str, str], article_html: str) -> str:
         """
         Собирает HTML контент из различных источников.
-        Использует AI если доступен, иначе шаблоны.
+        ВСЕ исправления HTML делаются ТОЛЬКО здесь!
         """
         html_parts = []
-        
-        # ⭐ ОДИН ЗАПРОС НА ОБА ТЕКСТА
-        intro = None
-        outro = None
-        
-        if hasattr(self, 'ai_generator') and self.ai_generator and self.ai_generator.enabled:
-            # ОДИН запрос вместо двух!
-            intro, outro = self.ai_generator.generate_both(
-                product_name=raw_product.Наименование or "",
-                brand=raw_product.Бренд or ""  # brand передаётся один раз для обоих
-            )
-            
-            print(f"\n🔍 ОТЛАДКА _build_html_content:")
-            print(f"   INTRO получен: {intro[:100] if intro else 'None'}")
-            print(f"   OUTRO получен: {outro[:100] if outro else 'None'}")
-        
-        # Если AI не сработал или отключен - используем шаблоны
-        if not intro and hasattr(self, 'template_generator') and self.template_generator:
-            intro = self.template_generator.generate_intro(
-                product_name=raw_product.Наименование or "",
-                brand=raw_product.Бренд or "",
-                product_id=raw_product.НС_код or ""
-            )
-            print(f"   INTRO из шаблона: {intro[:100] if intro else 'None'}")
-        
-        if not outro and hasattr(self, 'template_generator') and self.template_generator:
-            outro = self.template_generator.generate_outro(
-                product_name=raw_product.Наименование or "",
-                product_id=raw_product.НС_код or ""
-            )
-            print(f"   OUTRO из шаблона: {outro[:100] if outro else 'None'}")
-        
-        # Вставляем intro в начало
-        if intro:
-            html_parts.append(intro)
-            html_parts.append('')  # Пустая строка для отступа
-            print(f"✅ INTRO добавлен в html_parts")
-        else:
-            print(f"⚠️ INTRO не добавлен")
         
         # Блок 1: HTML из статьи (РЕМОНТИРУЕМ)
         processed_article = self._process_article(article_html)
@@ -682,21 +303,18 @@ class ContentHandler(BaseHandler):
         if additional_info_html:
             html_parts.append(additional_info_html)
         
-        # Вставляем outro в конец
-        if outro:
-            html_parts.append('')  # Пустая строка для отступа
-            html_parts.append(outro)
-            print(f"✅ OUTRO добавлен в html_parts")
-        else:
-            print(f"⚠️ OUTRO не добавлен")
-        
         # Объединяем все блоки
         full_html = "\n\n".join(html_parts)
+
+        #     # ОТЛАДКА
+        # print("="*80)
+        # print(f"!!!DEBUG _build_html_content ДО repair: содержит '&ndash'? {'&ndash' in full_html}")
         
-        # 🚨 ПРОВЕРКА ФИНАЛЬНОГО HTML
-        print(f"\n🔍 ФИНАЛЬНЫЙ HTML (первые 600 символов):")
-        print(full_html[:600])
-        print("="*80)
+        # result = self.html_repair.repair(full_html)
+        
+        # print(f"!!!DEBUG _build_html_content ПОСЛЕ repair: содержит '&ndash'? {'&ndash' in result}")
+        # print(f"!!!Первые 300 символов результата: {repr(result[:300])}")
+        # print("="*80)
         
         # ФИНАЛЬНЫЙ РЕМОНТ всего HTML
         return self.html_repair.repair(full_html)
@@ -725,16 +343,16 @@ class ContentHandler(BaseHandler):
                       '<ul>']
         
         for key, value in sorted(specs.items()):
-            # Сначала ремонтируем
             clean_key = self.html_repair.repair(key)
             clean_value = self.html_repair.repair(value)
-            
-            # ПОТОМ убираем HTML теги
+            html_parts.append(f'<li><strong>{clean_key}:</strong> {clean_value}</li>')
+
+            # Дополнительно: убираем HTML теги, если они есть
             clean_key = re.sub(r'<[^>]+>', '', clean_key)
             clean_value = re.sub(r'<[^>]+>', '', clean_value)
             
-            # И только ОДИН РАЗ добавляем
             html_parts.append(f'<li><strong>{clean_key}:</strong> {clean_value}</li>')
+
         
         html_parts.append('</ul></div>')
         
@@ -759,11 +377,13 @@ class ContentHandler(BaseHandler):
             
             # Добавляем документы с подзаголовками
             for doc_type, urls in doc_types.items():
-                html_parts.append(f'<h4>{doc_type.capitalize()}</h4>')
+
+                html_parts.append(f'<h4>{doc_type.capitalize()}</h4>')  # Подзаголовок ВСЕГДА
                 
                 for doc_url in urls:
                     doc_html = self._build_doc_link_html(doc_type, doc_url, raw_product)
                     html_parts.append(f'<p>{doc_html}</p>')
+
             
             html_parts.append('</div>')
         

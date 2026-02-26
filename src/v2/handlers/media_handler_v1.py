@@ -189,7 +189,6 @@ class MediaHandler(BaseHandler):
         # 8. Счетчики
         self.downloaded_images = 0
         self.failed_downloads = 0
-        self.skipped_images = 0  # Новый счетчик для пропущенных
         
         # 9. Сессия requests
         self._init_requests_session()
@@ -264,8 +263,7 @@ class MediaHandler(BaseHandler):
         result.update(self._process_documents(raw_product))
         
         logger.debug(f"MediaHandler обработал продукт {raw_product.НС_код}: "
-                    f"{self.downloaded_images} изображений скачано, "
-                    f"{self.skipped_images} пропущено")
+                    f"{self.downloaded_images} изображений скачано")
         return result
     
     def _init_requests_session(self) -> None:
@@ -363,15 +361,14 @@ class MediaHandler(BaseHandler):
             
             try:
                 # 1. Определяем локальный путь и финальный URL
-                local_path, final_url, should_download = self._prepare_image_paths(
+                local_path, final_url, need_download = self._prepare_image_paths(
                     image_url, raw_product, idx
                 )
                 
-                logger.debug(f"  Изображение {idx+1}: should_download={should_download}, local_path={local_path}, url={image_url[:50]}...")
+                logger.debug(f"  Изображение {idx+1}: need_download={need_download}, local_path={local_path}, url={image_url[:50]}...")
                 
-                # 2. Пытаемся скачать только если нужно
-                downloaded = False
-                if should_download:
+                # 2. Скачиваем только если нужно
+                if need_download:
                     print(f"   🚀 Начинаем скачивание...")
                     
                     # Получаем параметры для обработки
@@ -382,7 +379,7 @@ class MediaHandler(BaseHandler):
                     print(f"   slug: {slug}")
                     print(f"   idx: {idx}")
                     
-                    downloaded = self._download_single_image_with_session(
+                    success = self._download_single_image_with_session(
                         image_url, 
                         local_path,
                         ns_code,      # передаем параметры
@@ -390,22 +387,13 @@ class MediaHandler(BaseHandler):
                         idx           # передаем параметры
                     )
                     
-                    if downloaded:
+                    if success:
                         logger.info(f"Скачано новое изображение: {image_url} → {local_path}")
-                        self.downloaded_images += 1
                     else:
                         logger.warning(f"Не удалось скачать изображение: {image_url}")
-                        self.failed_downloads += 1
                         continue  # Пропускаем это изображение
                 else:
                     logger.debug(f"Изображение уже существует: {local_path}")
-                    self.skipped_images += 1
-                    # Файл уже существует, но мы должны проверить, нужна ли обработка
-                    # и FTP загрузка для существующих файлов
-                    if not self.skip_processed:
-                        ns_code = self._get_clean_ns_code(raw_product.НС_код)
-                        slug = self._generate_slug_from_title(raw_product.Наименование or "")
-                        self._process_and_upload_image(ns_code, slug, idx, local_path)
                 
                 # 3. Всегда добавляем финальный URL (даже если не скачивали)
                 if final_url:
@@ -413,6 +401,7 @@ class MediaHandler(BaseHandler):
                     clean_name = ' '.join((raw_product.Наименование or "").split()).strip()
                     image_entry = f"{final_url} ! alt : {clean_name} ! title : {clean_name} ! desc : ! caption :"
                     final_image_urls.append(image_entry)
+                    self.downloaded_images += 1
                     
             except Exception as e:
                 logger.error(f"Ошибка обработки изображения {image_url}: {e}", exc_info=True)
@@ -430,11 +419,10 @@ class MediaHandler(BaseHandler):
     def _prepare_image_paths(self, image_url: str, raw_product: RawProduct, index: int) -> tuple[Path, str, bool]:
         """
         Подготавливает пути для изображения.
-        Возвращает: (локальный путь, финальный URL, нужно ли скачивать)
         """
         print(f"\n🔧 DEBUG _prepare_image_paths:")
         print(f"   index: {index}")
-        print(f"   skip_processed: {self.skip_processed}")
+        print(f"   skip_processed: {self.skip_processed}")  # ← ДОБАВЬТЕ ЭТУ СТРОКУ!
         print(f"   raw_product.НС_код: {raw_product.НС_код}")
         
         # 1. Генерируем финальный URL
@@ -459,25 +447,29 @@ class MediaHandler(BaseHandler):
         print(f"   exists: {local_path.exists()}")
         
         # 4. Проверяем, нужно ли скачивать
-        # Скачиваем только если файл не существует
-        should_download = not local_path.exists()
+        need_download = not local_path.exists()
         
-        # Даже если файл существует, проверяем через трекер
-        if not should_download and not self.skip_processed and self.status_tracker:
-            ns_code_clean = self._get_clean_ns_code(raw_product.НС_код)
-            slug = self._generate_slug_from_title(raw_product.Наименование or "")
+        # ВАЖНОЕ ИСПРАВЛЕНИЕ ↓
+        if not need_download:
+            # Файл уже существует
             
-            # Проверяем, нужно ли обработать существующий файл
-            needs_processing = self.status_tracker.needs_processing(
-                ns_code_clean, slug, index, local_path
-            )
+            # ПЕРВОЕ: проверяем skip_processed
+            if self.skip_processed:
+                print(f"   ⏭️ skip_processed=True, пропускаем существующий файл")
+                return local_path, final_url, False  # need_download = False
             
-            # Если нужна обработка, мы не скачиваем заново, а просто используем существующий файл
-            # Флаг should_download остается False, но потом будет вызвана обработка
-            print(f"   status_tracker.needs_processing: {needs_processing}")
+            # ВТОРОЕ: только если skip_processed=False, проверяем status_tracker
+            if self.status_tracker:
+                ns_code_clean = self._get_clean_ns_code(raw_product.НС_код)
+                slug = self._generate_slug_from_title(raw_product.Наименование or "")
+                
+                need_download = self.status_tracker.needs_processing(
+                    ns_code_clean, slug, index, local_path
+                )
+                print(f"   status_tracker.needs_processing: {need_download}")
         
-        print(f"   should_download: {should_download}")
-        return local_path, final_url, should_download
+        print(f"   need_download: {need_download}")
+        return local_path, final_url, need_download
     
     def _get_clean_ns_code(self, ns_code: str) -> str:
         """
@@ -543,7 +535,9 @@ class MediaHandler(BaseHandler):
                                             index: int = 0) -> bool:
         """
         Скачивает одно изображение с использованием сессии.
-        ВОЗВРАЩАЕТ: True если успешно скачано, False если ошибка
+        
+        Returns:
+            True если успешно, False если ошибка
         """
         print(f"\n📥 DEBUG _download_single_image_with_session:")
         print(f"   URL: {image_url}")
@@ -625,7 +619,6 @@ class MediaHandler(BaseHandler):
                                   downloaded_path: Path) -> Optional[Path]:
         """
         Обрабатывает скачанное изображение и загружает на FTP.
-        ВОЗВРАЩАЕТ: путь к обработанному файлу или None
         """
         if not downloaded_path.exists():
             logger.warning(f"Файл для обработки не найден: {downloaded_path}")
@@ -897,6 +890,8 @@ class MediaHandler(BaseHandler):
         
         # Базовая статистика
         logger.info(f"MediaHandler: скачано {self.downloaded_images} изображений, "
-                   f"ошибок: {self.failed_downloads}, "
-                   f"пропущено: {self.skipped_images}")
+                   f"ошибок: {self.failed_downloads}")
         super().cleanup()
+
+# УДАЛИТЕ эти функции из класса - они не нужны здесь
+# Они должны быть в отдельном тестовом файле

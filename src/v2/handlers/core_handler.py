@@ -3,6 +3,7 @@ CoreHandler - основной обработчик для B2B-WC Converter v2.0
 Обрабатывает: названия, артикулы, цены, категории, SEO.
 """
 import re
+import datetime
 from typing import Dict, Any
 import logging
 from urllib.parse import urlparse
@@ -456,12 +457,16 @@ class CoreHandler(BaseHandler):
             "download_expiry": "download_expiry",
             "menu_order": "menu_order",
             "featured": "featured",
-            "post_date": "post_date"
+            # "post_date": "post_date"
         }
         
         for woo_field, config_key in status_fields.items():
             if config_key in default_values:
                 result[woo_field] = default_values[config_key]
+
+        current_datetime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        result["post_date"] = current_datetime
+
 
    
         # Добавляем дату публикации (02.02.2026)
