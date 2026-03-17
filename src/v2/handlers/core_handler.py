@@ -328,7 +328,7 @@ class CoreHandler(BaseHandler):
     
     def _process_excerpt(self, raw_product: RawProduct) -> Dict[str, Any]:
         """
-        Создает краткое описание из HTML статьи.
+        Создает краткое описание из AI-генерации или HTML статьи.
         
         Args:
             raw_product: Сырые данные продукта
@@ -336,22 +336,66 @@ class CoreHandler(BaseHandler):
         Returns:
             Словарь с полем post_excerpt
         """
-        article_html = raw_product.Статья.strip() if raw_product.Статья else ""
+        excerpt = ""
         
-        if not article_html:
-            return {"post_excerpt": ""}
+        # ⭐ ПРИОРИТЕТ 1: AI-сгенерированный excerpt (из ContentHandler)
+    # Приоритет 1: AI-сгенерированный
+        if hasattr(raw_product, '_ai_excerpt') and raw_product._ai_excerpt:
+            excerpt = raw_product._ai_excerpt
+            print(f"✅ Взял AI- excerpt: {excerpt[:50]}...")
+            return {"post_excerpt": excerpt}
+
         
-        # Удаляем HTML теги
-        text = re.sub(r'<[^>]+>', ' ', article_html)
+        # ⭐ ПРИОРИТЕТ 2: Из поля Краткое_описание (если есть)
+        elif hasattr(raw_product, 'Краткое_описание') and raw_product.Краткое_описание:
+            excerpt = raw_product.Краткое_описание.strip()
+            logger.debug(f"📝 Использую краткое описание из источника")
         
-        # Убираем лишние пробелы
-        text = re.sub(r'\s+', ' ', text).strip()
+        # ⭐ ПРИОРИТЕТ 3: Генерируем из статьи (старая логика)
+        else:
+            article_html = raw_product.Статья.strip() if raw_product.Статья else ""
+            
+            if article_html:
+                # Удаляем HTML теги
+                text = re.sub(r'<[^>]+>', ' ', article_html)
+                # Убираем лишние пробелы
+                text = re.sub(r'\s+', ' ', text).strip()
+                # Обрезаем до 160 символов
+                if len(text) > 160:
+                    excerpt = text[:157] + "..."
+                else:
+                    excerpt = text
+                logger.debug(f"📄 Сгенерировал excerpt из статьи: {excerpt[:50]}...")
         
-        # Обрезаем до 160 символов
-        if len(text) > 160:
-            text = text[:157] + "..."
+        return {"post_excerpt": excerpt} if excerpt else {"post_excerpt": ""}    
+    
+    #  старый способ генерации
+    # def _process_excerpt(self, raw_product: RawProduct) -> Dict[str, Any]:
+    #     """
+    #     Создает краткое описание из HTML статьи.
         
-        return {"post_excerpt": text}
+    #     Args:
+    #         raw_product: Сырые данные продукта
+            
+    #     Returns:
+    #         Словарь с полем post_excerpt
+    #     """
+    #     article_html = raw_product.Статья.strip() if raw_product.Статья else ""
+        
+    #     if not article_html:
+    #         return {"post_excerpt": ""}
+        
+    #     # Удаляем HTML теги
+    #     text = re.sub(r'<[^>]+>', ' ', article_html)
+        
+    #     # Убираем лишние пробелы
+    #     text = re.sub(r'\s+', ' ', text).strip()
+        
+    #     # Обрезаем до 160 символов
+    #     if len(text) > 160:
+    #         text = text[:157] + "..."
+        
+    #     return {"post_excerpt": text}
     
     def _process_seo(self, raw_product: RawProduct, processed_data: Dict[str, Any]) -> Dict[str, Any]:
         """

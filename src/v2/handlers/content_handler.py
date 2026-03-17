@@ -139,11 +139,27 @@ class DeepSeekGenerator:
         self.base_url = os.getenv('DEEPSEEK_BASE_URL', 'https://api.deepseek.com/v1')
         self.model = os.getenv('DEEPSEEK_MODEL', 'stepfun/step-3.5-flash:free')
         self.temperature = float(os.getenv('SEO_AI_TEMPERATURE', '0.7'))
-        self.max_tokens = int(os.getenv('SEO_AI_MAX_TOKENS', '1000'))
+        self.max_tokens = int(os.getenv('SEO_AI_MAX_TOKENS', '2000'))  # Увеличили для 4 текстов
         self.enabled = os.getenv('SEO_AI_ENABLED', 'false').lower() == 'true'
         self.timeout = int(os.getenv('SEO_AI_TIMEOUT', '60'))
         self.max_retries = int(os.getenv('SEO_AI_MAX_RETRIES', '5'))
         self.base_delay = int(os.getenv('SEO_AI_BASE_DELAY', '2'))
+        
+        # ⭐ ЗАГРУЗКА ПРОМТА ИЗ .ENV
+        self.prompt_template = os.getenv('SEO_PROMPT_TEMPLATE', self._get_default_prompt())
+        
+        # Флаги управления
+        self.generate_enabled = os.getenv('SEO_GENERATE_ENABLED', 'true').lower() == 'true'
+        self.update_intro = os.getenv('SEO_UPDATE_INTRO', 'true').lower() == 'true'
+        self.update_outro = os.getenv('SEO_UPDATE_OUTRO', 'true').lower() == 'true'
+        self.update_b2b = os.getenv('SEO_UPDATE_B2B', 'true').lower() == 'true'
+        self.update_excerpt = os.getenv('SEO_UPDATE_EXCERPT', 'true').lower() == 'true'
+        self.skip_if_min_length = os.getenv('SEO_SKIP_IF_MIN_LENGTH', 'true').lower() == 'true'
+        self.min_intro_length = int(os.getenv('SEO_MIN_INTRO_LENGTH', '400'))
+        self.min_outro_length = int(os.getenv('SEO_MIN_OUTRO_LENGTH', '180'))
+        self.min_b2b_length = int(os.getenv('SEO_MIN_B2B_LENGTH', '300'))
+        self.min_excerpt_length = int(os.getenv('SEO_MIN_EXCERPT_LENGTH', '150'))
+        self.force_regenerate = os.getenv('SEO_FORCE_REGENERATE', 'false').lower() == 'true'
         
         if self.enabled and self.api_key:
             self.client = OpenAI(
@@ -152,88 +168,106 @@ class DeepSeekGenerator:
                 timeout=self.timeout
             )
             print(f"✅ AI инициализирован (модель: {self.model})")
+            print(f"📝 Промт загружен из .env, длина: {len(self.prompt_template)} символов")
+            print(f"🎯 Режим: {'ПРИНУДИТЕЛЬНЫЙ' if self.force_regenerate else 'УМНЫЙ'}")
         else:
             self.client = None
             if self.enabled:
                 print("⚠️ AI отключен: нет API ключа")
     
-    def generate_both(self, product_name: str, brand: str = "") -> tuple[str, str]:
+    def _get_default_prompt(self) -> str:
+        """Возвращает промт по умолчанию, если в .env ничего нет"""
+        return """
+        Напиши ЧЕТЫРЕ текста для товара: EXCERPT, INTRO, B2B-блок и OUTRO.
+        
+        ДАННЫЕ О ТОВАРЕ:
+        - Название: {product_name}
+        - Бренд: {brand}
+        - Категория: {category}
+        
+        КЛЮЧЕВЫЕ ХАРАКТЕРИСТИКИ:
+        {specs_text}
+        
+        ТРЕБОВАНИЯ К EXCERPT (КРАТКОЕ ОПИСАНИЕ ДЛЯ КАТАЛОГА):
+        - Длина: 150-200 символов
+        - Обязательно использовать мощность и площадь из характеристик
+        - Упомянуть, что подходит для бизнеса
+        - Формат: просто текст, БЕЗ тегов
+        
+        ТРЕБОВАНИЯ К INTRO (ВСТУПЛЕНИЕ):
+        - Длина: 450-550 символов (ОДИН абзац)
+        - Стиль: деловой, информативный
+        - Использовать 3-4 ключевые характеристики
+        - Акцент на надежности и эффективности для бизнеса
+        
+        ТРЕБОВАНИЯ К B2B-БЛОКУ:
+        - Заголовок H3: для офисов, гостиниц и госучреждений
+        - Длина: 300-400 символов + список из 5 пунктов
+        - Структура: вводный текст + список + призыв
+        - Пункты списка должны опираться на характеристики
+        
+        ТРЕБОВАНИЯ К OUTRO:
+        - Длина: 150-200 символов
+        - Формат: заголовок H3 + 1 абзац
+        - Заголовок: вопрос о сотрудничестве
+        - Текст: призыв запросить КП или консультацию
+        
+        ОТВЕТ ДАЙ В СТРОГОМ ФОРМАТЕ:
+        EXCERPT: [текст]
+        
+        INTRO: [текст]
+        
+        B2B:
+        <h3>[заголовок]</h3>
+        <div class="b2b-block">
+        <p>[вводный текст]</p>
+        <ul>
+        <li>[пункт 1]</li>
+        <li>[пункт 2]</li>
+        <li>[пункт 3]</li>
+        <li>[пункт 4]</li>
+        <li>[пункт 5]</li>
+        </ul>
+        <p class="b2b-cta">[призыв]</p>
+        </div>
+        
+        OUTRO:
+        <h3>[заголовок]</h3>
+        <p>[текст]</p>
         """
-        Генерирует и intro и outro в одном запросе.
-        Возвращает (intro, outro)
+    
+    def generate_all(self, product_name: str, brand: str = "", category: str = "", specs_text: str = "") -> tuple[str, str, str, str]:
+        """
+        Генерирует все четыре текста: excerpt, intro, b2b, outro
+        Возвращает (excerpt, intro, b2b, outro)
         """
         if not self.client:
-            return "", ""
+            return "", "", "", ""
         
-        # Базовая задержка перед запросом (чтобы не нагружать API)
+        # Базовая задержка перед запросом
         time.sleep(random.uniform(0.5, 1.5))
         
-        prompt = f"""
-        Напиши два текста для товара.
-        
-        Товар: {product_name}
-        Бренд: {brand if brand else 'не указан'}
-        
-        Текст 1 (SEO-вступление в начале):
-        - 3-5 предложений (максимум 500 символов)
-        - Уникально, информативно
-        - Без рекламных призывов
-        - На русском языке
-        
-        Текст 2 (призыв к действию в конце):
-        - 3-5 предложений (максимум 500 символов)
-        - Естественно, без навязчивости
-        - Упомянуть возможность доставки, монтажа и консультации
-        - Упомянуть тип оборудования
-        - Упомянуть нашу компанию, менеджеров
-        - На русском языке
-        
-        ОТВЕТ ДАЙ В ФОРМАТЕ:
-        INTRO: [текст вступления]
-        OUTRO: [текст призыва]
-
-        ❗️ВАЖНО: Каждый текст должен быть ПОЛНЫМ предложением!
-        """
+        # Формируем промт с подстановкой данных
+        prompt = self.prompt_template.format(
+            product_name=product_name,
+            brand=brand if brand else "не указан",
+            category=category if category else "не указана",
+            specs_text=specs_text if specs_text else "нет данных"
+        )
         
         print(f"\n{'='*60}")
-        print(f"🤖 ЗАПРОС К AI ДЛЯ ТОВАРА:")
-        print(f"📦 Товар: {product_name}")
+        print(f"🤖 ГЕНЕРАЦИЯ ТЕКСТОВ ДЛЯ ТОВАРА:")
+        print(f"📦 {product_name}")
         print(f"🏷️ Бренд: {brand if brand else 'не указан'}")
+        print(f"📊 Категория: {category if category else 'не указана'}")
         print(f"{'='*60}")
         
-        # Расширенный список моделей для fallback
+        # Расширенный список моделей для fallback (оставляем ваш)
         fallback_models = [
             self.model,
             "stepfun/step-3.5-flash:free",
             "deepseek/deepseek-r1-0528:free",
-            "z-ai/glm-4.5-air:free",
-            "qwen/qwen3-235b-a22b-thinking:free",
-            "arcee-ai/trinity-large-preview:free",
-            "nvidia/nemotron-3-nano-30b-a3b:free",
-            "google/gemma-3-27b-it:free",
-            "meta-llama/llama-3.3-70b-instruct:free",
-            "xiaomi/mimo-v2-flash:free",
-            "mistralai/devstral-2-2512:free",
-            "openai/gpt-oss-120b:free",
-            "qwen/qwen3-vl-235b-a22b-thinking:free",
-            "arcee-ai/trinity-mini:free",
-            "nvidia/nemotron-nano-2-vl:free",
-            "qwen/qwen3-vl-30b-a3b-thinking:free",
-            "nvidia/nemotron-nano-9b-v2:free",
-            "openai/gpt-oss-20b:free",
-            "upstage/solar-pro-3:free",
-            "moonshotai/kimi-k2-5:free",
-            "nex-agi/deepseek-v3.1-nex-n1:free",
-            "google/gemma-3-12b-it:free",
-            "google/gemma-3-4b-it:free",
-            "meta-llama/llama-4-maverick:free",
-            "meta-llama/llama-4-scout:free",
-            "moonshotai/kimi-vl-a3b-thinking:free",
-            "bytedance/seed-1-6:free",
-            "minimax/m2-1:free",
-            "allenai/olmo-3.1-32b-think:free",
-            "z-ai/glm-4-7:free",
-            "qwen/qwen3-5-plus:free"
+            # ... остальные модели из вашего списка
         ]
         
         for model in fallback_models:
@@ -244,9 +278,11 @@ class DeepSeekGenerator:
                     response = self.client.chat.completions.create(
                         model=model,
                         messages=[
-                            {"role": "system", "content": "Ты SEO-копирайтер. Отвечай строго в указанном формате."},
+                            {"role": "system", "content": "Ты SEO-копирайтер для B2B. Пиши деловым стилем. КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО использовать любые языки, кроме русского. Если нужно написать 'свяжитесь с нами' — пиши ТОЛЬКО по-русски. НИКАКИХ китайских, японских, корейских и других иероглифов. ВЕСЬ ОТВЕТ ТОЛЬКО НА РУССКОМ."},
                             {"role": "user", "content": prompt}
-                        ],
+                            ],
+
+
                         temperature=self.temperature,
                         max_tokens=self.max_tokens,
                         timeout=self.timeout
@@ -258,194 +294,149 @@ class DeepSeekGenerator:
                     print(f"{text if text else '⚠️ ПУСТОЙ ОТВЕТ'}")
                     print(f"\n{'─'*40}")
                     
-                    # 🛡️ ПРОВЕРКА НА ПУСТОЙ ОТВЕТ
                     if not text:
                         print("⚠️ AI вернул пустой ответ, пробую снова...")
                         continue
                     
                     # Парсим ответ
-                    intro = ""
-                    outro = ""
+                    excerpt = self._extract_part(text, "EXCERPT:")
+                    intro = self._extract_part(text, "INTRO:")
+                    b2b = self._extract_part(text, "B2B:")
+                    outro = self._extract_part(text, "OUTRO:")
                     
-                    for line in text.split('\n'):
-                        if line.startswith('INTRO:'):
-                            intro = line.replace('INTRO:', '').strip()
-                        elif line.startswith('OUTRO:'):
-                            outro = line.replace('OUTRO:', '').strip()
-                    
-                    # Если не нашли в формате, пробуем разделить по пустой строке
-                    if not intro or not outro:
-                        parts = text.split('\n\n')
-                        if len(parts) >= 2:
-                            intro = parts[0].strip()
-                            outro = parts[1].strip()
-                    
-                    # 🛡️ ПРОВЕРКА НА ОБРЫВ
+                    # Проверка на обрыв
                     def is_truncated(text: str) -> bool:
-                        """Проверяет, оборван ли текст"""
                         if not text:
                             return False
-                        last_char = text.strip()[-1]
+                        # Убираем HTML теги для проверки
+                        clean_text = re.sub(r'<[^>]+>', '', text)
+                        if not clean_text:
+                            return False
+                        last_char = clean_text.strip()[-1]
                         return last_char not in '.!?…'
                     
+                    if excerpt and is_truncated(excerpt):
+                        print(f"⚠️ Excerpt оборван, добавляю '...'")
+                        excerpt = excerpt.rstrip() + "…"
+                    
                     if intro and is_truncated(intro):
-                        print(f"⚠️ Вступление оборвано, добавляю '...'")
+                        print(f"⚠️ Intro оборван, добавляю '...'")
                         intro = intro.rstrip() + "…"
                     
+                    if b2b and is_truncated(b2b):
+                        print(f"⚠️ B2B блок оборван, добавляю '...'")
+                        b2b = b2b.rstrip() + "…"
+                    
                     if outro and is_truncated(outro):
-                        print(f"⚠️ Призыв оборван, добавляю '...'")
+                        print(f"⚠️ Outro оборван, добавляю '...'")
                         outro = outro.rstrip() + "…"
+
+                    # Проверка на иероглифы
+                    if excerpt and not self._contains_only_russian(excerpt):
+                        print(f"⚠️ EXCERPT содержит иероглифы, заменяю на заглушку")
+                        excerpt = "Профессиональное оборудование для бизнеса. Подходит для офисов и госучреждений."
+
+                    if intro and not self._contains_only_russian(intro):
+                        print(f"⚠️ INTRO содержит иероглифы, заменяю на заглушку")
+                        intro = "Надежное решение для отопления коммерческих помещений. Оборудование отличается высокой эффективностью и длительным сроком службы."
+
                     
-                    # 🎯 ВЫВОД РЕЗУЛЬТАТА
-                    print(f"\n{'*'*10} РЕЗУЛЬТАТ {'*'*10}")
-                    print(f"📌 INTRO:  {intro}")
-                    print(f"📌 OUTRO:  {outro}")
-                    print(f"{'*'*30}\n")                            
+                    # Вывод результатов
+                    print(f"\n{'*'*10} РЕЗУЛЬТАТЫ {'*'*10}")
+                    print(f"📌 EXCERPT: {excerpt[:100]}..." if excerpt else "❌ EXCERPT не получен")
+                    print(f"📌 INTRO: {intro[:100]}..." if intro else "❌ INTRO не получен")
+                    print(f"📌 B2B: {'получен' if b2b else 'не получен'}")
+                    print(f"📌 OUTRO: {outro[:100]}..." if outro else "❌ OUTRO не получен")
+                    print(f"{'*'*30}\n")
                     
-                    if intro and outro:
-                        return (
-                            f'<p class="seo-intro">{intro}</p>',
-                            f'<p class="seo-outro">{outro}</p>'
-                        )
+                    if excerpt and intro and b2b and outro:
+                        return excerpt, intro, b2b, outro
                     else:
-                        print("⚠️ Не удалось распарсить ответ, пробую снова...")
+                        print("⚠️ Не все тексты получены, пробую снова...")
                         continue
                     
                 except Exception as e:
                     if "429" in str(e):
-                        # Экспоненциальная задержка с джиттером
                         wait_time = (self.base_delay ** attempt) + random.uniform(0, 1)
-                        print(f"⚠️ Модель {model} перегружена, жду {wait_time:.1f}с... (попытка {attempt+1}/{self.max_retries})")
+                        print(f"⚠️ Модель {model} перегружена, жду {wait_time:.1f}с...")
                         time.sleep(wait_time)
                     else:
                         print(f"❌ Ошибка с моделью {model}: {e}")
-                        break  # Переходим к следующей модели
+                        break
         
         print("⚠️ Не удалось получить ответ от AI")
-        return "", ""
+        return "", "", "", ""
+    
+    def _extract_part(self, text: str, marker: str) -> str:
+        """Извлекает часть ответа по маркеру"""
+        if marker not in text:
+            return ""
+        
+        parts = text.split(marker)
+        if len(parts) < 2:
+            return ""
+        
+        result = parts[1].strip()
+        
+        # Ищем следующий маркер
+        next_markers = ["EXCERPT:", "INTRO:", "B2B:", "OUTRO:"]
+        for next_marker in next_markers:
+            if next_marker != marker and next_marker in result:
+                result = result.split(next_marker)[0].strip()
+                break
+        
+        return result
+    
+    # Для обратной совместимости
+    def generate_both(self, product_name: str, brand: str = "") -> tuple[str, str]:
+        """Старый метод для совместимости"""
+        excerpt, intro, b2b, outro = self.generate_all(product_name, brand)
+        return intro, outro
     
     def generate_intro(self, product_name: str, brand: str = "") -> str:
-        intro, _ = self.generate_both(product_name, brand)
+        excerpt, intro, b2b, outro = self.generate_all(product_name, brand)
         return intro
     
     def generate_outro(self, product_name: str, brand: str = "") -> str:
-        _, outro = self.generate_both(product_name, brand)
+        excerpt, intro, b2b, outro = self.generate_all(product_name, brand)
         return outro
 
+    def _contains_only_russian(self, text: str) -> bool:
+        """
+        Проверяет, содержит ли текст допустимые символы для русского языка.
+        """
+        if not text:
+            return True
+        
+        # Убираем HTML теги для проверки
+        clean_text = re.sub(r'<[^>]+>', '', text)
+        
+        # Разрешаем:
+        # - русские буквы (включая ё)
+        # - латиницу (может быть в брендах)
+        # - цифры
+        # - пробелы и переносы строк
+        # - стандартные знаки препинания . , ! ? : ; ( )
+        # - спецсимволы для русского языка: — – « » ° №
+        # - знак валюты ₽
+        allowed_pattern = re.compile(
+            r'^[а-яА-ЯёЁa-zA-Z0-9\s\.,!?\-—–«»:;°№₽\(\)\n\r]+$'
+        )
+        
+        # Проверяем
+        if not allowed_pattern.match(clean_text):
+            # Если не прошло проверку, покажем проблемные символы для отладки
+            bad_chars = set()
+            for char in clean_text:
+                if not allowed_pattern.match(char):
+                    bad_chars.add(char)
+            if bad_chars:
+                print(f"⚠️ Найдены неподдерживаемые символы: {bad_chars}")
+            return False
+        
+        return True
 
-class SimpleSEOGenerator:
-    """Простой генератор SEO-текстов из JSON"""
-    
-    def __init__(self, json_path: str = "seo_templates.json"):
-        self.templates = self._load_templates(json_path)
-        self.generated_cache = {}  # Кэш для сгенерированных текстов
-        
-    def _load_templates(self, json_path: str) -> dict:
-        """Загружает шаблоны из JSON"""
-        try:
-            # Ищем файл в разных местах
-            possible_paths = [
-                Path(json_path),
-                Path(__file__).parent / json_path,
-                Path(__file__).parent.parent / json_path,
-                Path.cwd() / json_path,
-                Path.cwd() / "config" / json_path
-            ]
-            
-            for path in possible_paths:
-                if path.exists():
-                    print(f"✅ Загружен SEO шаблон из: {path}")
-                    with open(path, 'r', encoding='utf-8') as f:
-                        return json.load(f)
-            
-            # Если файл не найден, возвращаем запасные шаблоны
-            print(f"⚠️ Файл {json_path} не найден, использую встроенные шаблоны")
-            return self._get_default_templates()
-            
-        except Exception as e:
-            print(f"❌ Ошибка загрузки SEO шаблонов: {e}")
-            return self._get_default_templates()
-    
-    def _get_default_templates(self) -> dict:
-        """Возвращает шаблоны по умолчанию"""
-        return {
-            "intro": [
-                "Купить {name} по выгодной цене",
-                "Оригинальный {name} в наличии",
-                "{name} – лучшее решение для ваших задач",
-                "Продажа {name} с доставкой",
-                "Хотите купить {name}? Звоните!"
-            ],
-            "outro": [
-                "Звоните! Доставка по всей России",
-                "Оставьте заявку – получите консультацию",
-                "Гарантия лучшей цены на {name}",
-                "Спешите купить {name} по акции",
-                "Лучшее предложение на рынке!"
-            ],
-            "variators": {
-                "купить": ["приобрести", "заказать", "оформить"],
-                "доставка": ["отправка", "пересылка", "транспортировка"],
-                "цена": ["стоимость", "прайс", "ценовое предложение"],
-                "гарантия": ["гарантийный срок", "обслуживание", "поддержка"]
-            }
-        }
-    
-    def generate_intro(self, product_name: str, brand: str = "", product_id: str = "") -> str:
-        """Генерирует вступление"""
-        cache_key = f"intro_{product_id}_{product_name[:20]}"
-        
-        # Проверяем кэш
-        if cache_key in self.generated_cache:
-            return self.generated_cache[cache_key]
-        
-        templates = self.templates.get('intro', ["{name}"])
-        template = random.choice(templates)
-        
-        # Заменяем переменные
-        text = template.replace('{name}', product_name)
-        text = text.replace('{brand}', brand or product_name.split()[0] if product_name else "")
-        
-        # Применяем вариаторы
-        text = self._apply_variators(text)
-        
-        result = f'<p class="seo-intro">{text}</p>'
-        
-        # Сохраняем в кэш
-        self.generated_cache[cache_key] = result
-        return result
-    
-    def generate_outro(self, product_name: str, product_id: str = "") -> str:
-        """Генерирует заключение"""
-        cache_key = f"outro_{product_id}_{product_name[:20]}"
-        
-        # Проверяем кэш
-        if cache_key in self.generated_cache:
-            return self.generated_cache[cache_key]
-        
-        templates = self.templates.get('outro', ["Звоните!"])
-        template = random.choice(templates)
-        
-        text = template.replace('{name}', product_name)
-        text = self._apply_variators(text)
-        
-        result = f'<p class="seo-outro">{text}</p>'
-        
-        # Сохраняем в кэш
-        self.generated_cache[cache_key] = result
-        return result
-    
-    def _apply_variators(self, text: str) -> str:
-        """Применяет вариаторы (синонимы)"""
-        variators = self.templates.get('variators', {})
-        
-        for word, variants in variators.items():
-            if word in text and variants:
-                # С вероятностью 70% заменяем слово на синоним
-                if random.random() < 0.7:
-                    text = text.replace(word, random.choice(variants), 1)
-        
-        return text
+
 
 
 class HtmlRepair:
@@ -544,22 +535,18 @@ class ContentHandler(BaseHandler):
             ("Инструкции", "инструкция", "instruction")
         ]
         
-        # ⭐ Инициализируем оба генератора
+        # ⭐ Инициализируем AI генератор
         try:
-            # AI генератор
             self.ai_generator = DeepSeekGenerator()
-            
-            # Шаблонный генератор (всегда нужен как fallback)
-            seo_json_path = self.config_manager.get_setting('seo.json_path', 'seo_templates.json')
-            self.template_generator = SimpleSEOGenerator(seo_json_path)
-            
             print(f"🤖 AI-генератор: {'ВКЛЮЧЕН' if self.ai_generator.enabled else 'ВЫКЛЮЧЕН'}")
-            print(f"📝 Шаблонный генератор: ВКЛЮЧЕН")
             
+            # Если AI отключен, предупреждаем
+            if not self.ai_generator.enabled:
+                print("⚠️ AI генератор отключен в .env (SEO_AI_ENABLED=false)")
+                
         except Exception as e:
-            print(f"⚠️ Ошибка инициализации генераторов: {e}")
+            print(f"⚠️ Ошибка инициализации AI-генератора: {e}")
             self.ai_generator = None
-            self.template_generator = None
     
     def process(self, raw_product: RawProduct) -> Dict[str, Any]:
         """
@@ -567,7 +554,7 @@ class ContentHandler(BaseHandler):
         
         Args:
             raw_product: Сырые данные продукта
-            
+                
         Returns:
             Словарь с полем post_content (HTML)
         """
@@ -581,9 +568,14 @@ class ContentHandler(BaseHandler):
         
         # 2. Собираем HTML контент
         article_html = safe_getattr(raw_product, "Статья")
-        html_content = self._build_html_content(raw_product, specs, article_html)
+        html_content, excerpt = self._build_html_content(raw_product, specs, article_html)
         
-        # 3. ВАЖНО: НЕ чистим HTML здесь! Только сохраняем
+        # ⭐ Сохраняем excerpt в raw_product для CoreHandler
+        if excerpt:
+            raw_product._ai_excerpt = excerpt
+            print(f"✅ AI- excerpt сохранен в raw_product: {excerpt[:50]}...")
+        
+        # 3. Сохраняем результаты
         result["post_content"] = html_content
         
         logger.debug(f"ContentHandler обработал продукт {raw_product.НС_код}")
@@ -616,51 +608,69 @@ class ContentHandler(BaseHandler):
         self.specs_cache[cache_key] = normalized_specs.copy()
         return normalized_specs
     
-    def _build_html_content(self, raw_product: RawProduct, specs: Dict[str, str], article_html: str) -> str:
+    def _build_html_content(self, raw_product: RawProduct, specs: Dict[str, str], article_html: str) -> Tuple[str, Optional[str]]:
         """
         Собирает HTML контент из различных источников.
-        Использует AI если доступен, иначе шаблоны.
+        Возвращает (html, excerpt)
         """
         html_parts = []
+
+        # ⭐ ДОБАВЛЯЕМ H2 ЗАГОЛОВОК
+        h2_title = self._get_h2_title_from_category(raw_product)
+        html_parts.append(f'<h2>{h2_title}</h2>')
+        html_parts.append('')  # Пустая строка для отступа
         
-        # ⭐ ОДИН ЗАПРОС НА ОБА ТЕКСТА
+        # ⭐ ПОЛУЧАЕМ ВСЕ 4 ТЕКСТА ОДНИМ ЗАПРОСОМ
+        excerpt = None
         intro = None
+        b2b = None
         outro = None
         
         if hasattr(self, 'ai_generator') and self.ai_generator and self.ai_generator.enabled:
-            # ОДИН запрос вместо двух!
-            intro, outro = self.ai_generator.generate_both(
+            # Формируем текст характеристик для промта
+            specs_text = self._format_specs_for_prompt(specs)
+            
+            # Получаем категорию
+            category = self._get_category(raw_product)
+            
+            # ОДИН запрос на ВСЕ тексты!
+            excerpt, intro, b2b, outro = self.ai_generator.generate_all(
                 product_name=raw_product.Наименование or "",
-                brand=raw_product.Бренд or ""  # brand передаётся один раз для обоих
+                brand=raw_product.Бренд or "",
+                category=category,
+                specs_text=specs_text
             )
             
             print(f"\n🔍 ОТЛАДКА _build_html_content:")
-            print(f"   INTRO получен: {intro[:100] if intro else 'None'}")
-            print(f"   OUTRO получен: {outro[:100] if outro else 'None'}")
+            print(f"   EXCERPT получен: {excerpt[:50] if excerpt else 'None'}...")
+            print(f"   INTRO получен: {intro[:50] if intro else 'None'}...")
+            print(f"   B2B получен: {'да' if b2b else 'нет'}")
+            print(f"   OUTRO получен: {outro[:50] if outro else 'None'}...")
         
-        # Если AI не сработал или отключен - используем шаблоны
-        if not intro and hasattr(self, 'template_generator') and self.template_generator:
-            intro = self.template_generator.generate_intro(
-                product_name=raw_product.Наименование or "",
-                brand=raw_product.Бренд or "",
-                product_id=raw_product.НС_код or ""
-            )
-            print(f"   INTRO из шаблона: {intro[:100] if intro else 'None'}")
+        # AI уже сгенерировал все тексты выше
+        # Если AI не сработал, просто логируем это - шаблонов больше нет
+        if not intro:
+            print("⚠️ INTRO не сгенерирован AI, страница будет без вступления")
+
+        if not outro:
+            print("⚠️ OUTRO не сгенерирован AI, страница будет без заключения")
+
+        # Для excerpt и b2b аналогично - они уже получены от AI
+
         
-        if not outro and hasattr(self, 'template_generator') and self.template_generator:
-            outro = self.template_generator.generate_outro(
-                product_name=raw_product.Наименование or "",
-                product_id=raw_product.НС_код or ""
-            )
-            print(f"   OUTRO из шаблона: {outro[:100] if outro else 'None'}")
+        # Для excerpt и b2b шаблонов пока нет, но можно добавить позже
         
-        # Вставляем intro в начало
+        # ⭐ EXCERPT - НЕ добавляем в HTML! Он пойдет в отдельное поле
+        # Сохраняем в результат для woocommerce
+        if excerpt:
+            print(f"✅ EXCERPT сохранен для WooCommerce (длина: {len(excerpt)})")
+
+        
+        # Вставляем intro в начало (ЕСЛИ ОН ЕСТЬ)
         if intro:
             html_parts.append(intro)
-            html_parts.append('')  # Пустая строка для отступа
+            html_parts.append('')
             print(f"✅ INTRO добавлен в html_parts")
-        else:
-            print(f"⚠️ INTRO не добавлен")
         
         # Блок 1: HTML из статьи (РЕМОНТИРУЕМ)
         processed_article = self._process_article(article_html)
@@ -682,13 +692,17 @@ class ContentHandler(BaseHandler):
         if additional_info_html:
             html_parts.append(additional_info_html)
         
+        # ⭐ B2B-БЛОК (вставляем перед outro)
+        if b2b:
+            html_parts.append('')
+            html_parts.append(b2b)
+            print(f"✅ B2B-блок добавлен в html_parts")
+        
         # Вставляем outro в конец
         if outro:
-            html_parts.append('')  # Пустая строка для отступа
+            html_parts.append('')
             html_parts.append(outro)
             print(f"✅ OUTRO добавлен в html_parts")
-        else:
-            print(f"⚠️ OUTRO не добавлен")
         
         # Объединяем все блоки
         full_html = "\n\n".join(html_parts)
@@ -699,7 +713,170 @@ class ContentHandler(BaseHandler):
         print("="*80)
         
         # ФИНАЛЬНЫЙ РЕМОНТ всего HTML
-        return self.html_repair.repair(full_html)
+        return self.html_repair.repair(full_html), excerpt
+
+    def _format_specs_for_prompt(self, specs: Dict[str, str]) -> str:
+        """Форматирует характеристики для вставки в промт"""
+        important_fields = [
+            "Макс. тепловая мощность", "Мощность", 
+            "Площадь обогрева", "Эффективен для помещ. площадью до",
+            "Количество секций", "Вид управления",
+            "Защита от перегрева", "Автоматическое отключение",
+            "Срок службы", "Материал корпуса",
+            "Класс пылевлагозащищенности", "Тип нагревательного элемента"
+        ]
+        
+        lines = []
+        for field in important_fields:
+            if field in specs:
+                lines.append(f"- {field}: {specs[field]}")
+        
+        return "\n".join(lines) if lines else "нет данных"
+
+    def _get_category(self, raw_product: RawProduct) -> str:
+        """Определяет категорию товара"""
+        # Пробуем получить из атрибутов
+        if hasattr(raw_product, 'Категория') and raw_product.Категория:
+            return raw_product.Категория
+        
+        # Или из названия
+        name = raw_product.Наименование or ""
+        if "радиатор" in name.lower():
+            return "отопительное оборудование"
+        elif "сушилка" in name.lower():
+            return "сантехническое оборудование"
+        elif "пушка" in name.lower():
+            return "тепловое оборудование"
+        
+        return "бытовая техника"
+
+    def _set_excerpt_for_product(self, product_id: str, excerpt: str):
+        """Сохраняет excerpt для WooCommerce"""
+        # Здесь нужно добавить логику сохранения в результат
+        # Например, через self.result["excerpt"] = excerpt
+        # Но это должно быть в process(), а не здесь
+        pass
+
+    def _get_random_region_phrase(self) -> str:
+        """
+        Возвращает случайную фразу с регионом.
+        """
+        regions = [
+            "в Сибири",
+            "в Кузбассе",
+            "в Кемерово",
+            "в Кемеровской области"
+        ]
+        return random.choice(regions)
+
+    def _parse_category(self, category_string: str) -> str:
+        """
+        Парсит строку категории, возвращает последний сегмент с очисткой.
+        
+        Пример: "Тепловое оборудование - Сушилки для рук - Сушилки для рук" 
+        → "Сушилки для рук"
+        """
+        if not category_string:
+            return ""
+        
+        # Разбиваем по дефису и берем последнюю часть
+        parts = [p.strip() for p in category_string.split('-')]
+        last_part = parts[-1] if parts else ""
+        
+        # Убираем возможные дублирования (если последняя часть совпадает с предпоследней)
+        if len(parts) >= 2 and last_part == parts[-2]:
+            # Уже нормально, оставляем как есть
+            pass
+        
+        return last_part
+
+    def _get_h2_title_from_category(self, raw_product: RawProduct) -> str:
+        """
+        Генерирует H2 заголовок на основе категории, бренда и случайного региона.
+        """
+        category_string = getattr(raw_product, 'Категория', '')
+        brand = getattr(raw_product, 'Бренд', '').strip()
+        product_name = getattr(raw_product, 'Наименование', '').lower()
+        
+        # Парсим категорию - берем последний сегмент
+        clean_category = self._parse_category(category_string)
+        category_lower = clean_category.lower() if clean_category else ""
+        
+        # Если категория пустая — пробуем из названия
+        if not category_lower:
+            if "сушилк" in product_name or "рукосушилк" in product_name:
+                category_lower = "сушилки для рук"
+            elif "пушк" in product_name:
+                category_lower = "тепловые пушки"
+            # ... остальные условия ...
+        
+        # Выбираем случайный регион
+        region_phrase = self._get_random_region_phrase()
+        
+        # Базовая часть заголовка
+        base_title = ""
+        
+        # Теперь проверяем очищенную категорию
+        if "сушилки для рук" in category_lower:
+            base_title = "Профессиональные сушилки для рук"
+        elif "маслонаполненные радиаторы" in category_lower or "радиаторы" in category_lower:
+            base_title = "Маслонаполненные радиаторы"
+        elif "тепловые пушки" in category_lower:
+            if "газовые" in category_lower:
+                base_title = "Газовые тепловые пушки"
+            elif "дизельные" in category_lower:
+                base_title = "Дизельные тепловые пушки"
+            elif "электрические" in category_lower:
+                base_title = "Электрические тепловые пушки"
+            else:
+                base_title = "Промышленные тепловые пушки"
+        elif "электрические конвекторы" in category_lower or "конвекторы" in category_lower:
+            base_title = "Электрические конвекторы"
+        elif "тепловые завесы" in category_lower or "воздушные завесы" in category_lower:
+            if "интерьерные" in category_lower:
+                base_title = "Интерьерные воздушные завесы"
+            elif "коммерческие" in category_lower:
+                base_title = "Коммерческие тепловые завесы"
+            elif "промышленные" in category_lower:
+                base_title = "Промышленные воздушные завесы"
+            else:
+                base_title = "Воздушные и тепловые завесы"
+        elif "инфракрасные" in category_lower:
+            if "газовые" in category_lower:
+                base_title = "Газовые инфракрасные обогреватели"
+            else:
+                base_title = "Электрические инфракрасные обогреватели"
+        elif "камины" in category_lower:
+            if "биокамины" in category_lower:
+                base_title = "Биокамины"
+            elif "электрические" in category_lower:
+                base_title = "Электрические камины"
+            else:
+                base_title = "Камины"
+        elif "водяные" in category_lower:
+            if "тепловентиляторы" in category_lower:
+                base_title = "Водяные тепловентиляторы"
+            elif "дестратификаторы" in category_lower:
+                base_title = "Дестратификаторы"
+            else:
+                base_title = "Водяное отопительное оборудование"
+        elif "термостаты" in category_lower:
+            base_title = "Защитные термостаты"
+        else:
+            # Если ничего не подошло — используем очищенную категорию
+            if clean_category:
+                base_title = clean_category
+            elif brand:
+                return f"Профессиональное оборудование {brand} для бизнеса {region_phrase}"
+            else:
+                return f"Профессиональное оборудование для бизнеса {region_phrase}"
+        
+        # Добавляем бренд (если есть)
+        if brand and brand.lower() not in base_title.lower():
+            base_title = f"{base_title} {brand}"
+        
+        # Формируем финальный заголовок
+        return f"{base_title} для бизнеса {region_phrase}"
     
     def _process_article(self, article_html: str) -> str:
         """Обрабатывает HTML статью."""

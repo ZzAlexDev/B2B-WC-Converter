@@ -193,6 +193,18 @@ class MediaHandler(BaseHandler):
         
         # 9. Сессия requests
         self._init_requests_session()
+
+        # ⭐ ДОБАВЛЯЕМ ФИЛЬТРЫ В САМЫЙ КОНЕЦ
+        self.filters_config = self.config_manager.get_setting('filters', {})
+        self.filters_enabled = self.filters_config.get('enabled', False)
+        
+        # Логируем статус фильтров
+        print(f"🔍 MediaHandler: фильтры {'ВКЛЮЧЕНЫ' if self.filters_enabled else 'ВЫКЛЮЧЕНЫ'}")
+        if self.filters_enabled:
+            print(f"   Режим: {self.filters_config.get('mode', 'AND')}")
+            print(f"   Брендов в фильтре: {len(self.filters_config.get('brands', []))}")
+            print(f"   Категорий в фильтре: {len(self.filters_config.get('categories', []))}")
+       
         
         logger.info(f"MediaHandler инициализирован: "
                    f"image_processing={self.image_processing_enabled}, "

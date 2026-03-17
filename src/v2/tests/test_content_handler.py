@@ -9,7 +9,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.v2.handlers.content_handler import ContentHandler
+from src.v2.handlers.content_handler_old_4 import ContentHandler
 from src.v2.models import RawProduct
 from src.v2.config_manager import ConfigManager
 

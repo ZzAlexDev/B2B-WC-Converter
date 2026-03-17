@@ -28,10 +28,11 @@ class Aggregator:
         self.tags_handler.set_specs_handler(self.specs_handler)  # ← Связываем
         
         self.handlers = [
-            CoreHandler(config_manager),
-            self.specs_handler,
+            
             MediaHandler(config_manager),
-            ContentHandler(config_manager)
+            ContentHandler(config_manager),
+            CoreHandler(config_manager),
+            self.specs_handler
         ]
         
         logger.info(f"Aggregator инициализирован с {len(self.handlers)} обработчиками")
